@@ -20,7 +20,13 @@ RUN apt-get update \
  && cd /tmp/ta-lib-${TALIB_VERSION} \
  && ./configure --prefix=/opt/ta-lib \
  && make -j"$(nproc)" \
- && make install
+ && make install \
+ && set -eux; mkdir -p /out/lib/pkgconfig /out/include /out/bin; \
+    cp -a /opt/ta-lib/lib/libta_lib.* /out/lib/; \
+    cp -a /opt/ta-lib/include/ta-lib  /out/include/; \
+    [ -f /opt/ta-lib/lib/pkgconfig/ta-lib.pc ] && cp /opt/ta-lib/lib/pkgconfig/ta-lib.pc /out/lib/pkgconfig/ta-lib.pc; \
+    [ -f /opt/ta-lib/bin/ta-lib-config ]       && cp /opt/ta-lib/bin/ta-lib-config       /out/bin/ta-lib-config; \
+    :
 
 # --- runtime ---------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim
@@ -42,14 +48,11 @@ RUN apt-get update \
  && apt-get upgrade -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
-# Bring TA-Lib runtime + headers + ta-lib-config into a clean image. No
-# build-essential, no wget. Downstream callers that need to `pip install
-# ta-lib` should add their own build toolchain on top.
-COPY --from=builder /opt/ta-lib/lib/libta_lib.so*  /usr/lib/
-COPY --from=builder /opt/ta-lib/lib/libta_lib.a    /usr/lib/
-COPY --from=builder /opt/ta-lib/lib/pkgconfig/ta-lib.pc /usr/lib/pkgconfig/ta-lib.pc
-COPY --from=builder /opt/ta-lib/include/ta-lib     /usr/include/ta-lib
-COPY --from=builder /opt/ta-lib/bin/ta-lib-config  /usr/bin/ta-lib-config
+# Bring TA-Lib runtime + headers (+ ta-lib-config if upstream still
+# ships it) into a clean image. No build-essential, no wget. Downstream
+# callers that need to `pip install ta-lib` should add their own build
+# toolchain on top.
+COPY --from=builder /out/ /usr/
 
 RUN ldconfig
 
