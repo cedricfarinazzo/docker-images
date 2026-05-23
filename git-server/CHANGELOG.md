@@ -1,3 +1,19 @@
+# [git-server-v2.0.0](https://github.com/cedricfarinazzo/docker-images/compare/git-server-v1.0.1...git-server-v2.0.0) (2026-05-23)
+
+
+* fix(security)!: pin tarball sha256s, multistage to drop build toolchain, defensive bootstrap quoting ([fe712b0](https://github.com/cedricfarinazzo/docker-images/commit/fe712b0d288a96e9ee77122f4821d58a636d6c5d))
+
+
+### BREAKING CHANGES
+
+* py-ta-lib no longer ships a build toolchain. Existing
+`Dockerfile`s that `pip install ta-lib` on top of this image will fail
+with missing gcc/g++. Add `RUN apt-get install -y build-essential`
+(debian variant) or `RUN apk add build-base` (alpine variant) before
+the pip install. See py-ta-lib/README.md downstream-usage section.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
 # [git-server-v1.0.1](https://github.com/cedricfarinazzo/docker-images/compare/git-server-v1.0.0...git-server-v1.0.1) (2026-05-23)
 
 
