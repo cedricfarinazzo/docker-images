@@ -33,7 +33,6 @@ jobs:
       - name: Release each workspace package
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEBUG: "semantic-release:*,semantic-release-monorepo*"
         run: |
           set -euo pipefail
           ROOT="$PWD"
@@ -41,7 +40,7 @@ jobs:
           for PKG in $PKGS; do
             echo "::group::semantic-release for ${PKG}"
             cd "$ROOT/$PKG"
-            bunx semantic-release --debug
+            bunx semantic-release
             cd "$ROOT"
             echo "::endgroup::"
           done
