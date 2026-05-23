@@ -1,0 +1,218 @@
+name: build-git-server
+
+on:
+  push:
+    tags:
+      - "git-server-v*.*.*"
+  workflow_dispatch:
+    inputs:
+      semver:
+        description: "Semver to build (e.g. 1.0.0). Required for workflow_dispatch."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/cedricfarinazzo/git-server
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      semver: ${{ steps.parse.outputs.semver }}
+      major: ${{ steps.parse.outputs.major }}
+      minor: ${{ steps.parse.outputs.minor }}
+      build_matrix: ${{ steps.matrix.outputs.build_matrix }}
+      combo_matrix: ${{ steps.matrix.outputs.combo_matrix }}
+      default_alpine: ${{ steps.matrix.outputs.default_alpine }}
+      alpines: ${{ steps.matrix.outputs.alpines }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Parse semver from tag or dispatch input
+        id: parse
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+          DISPATCH_SEMVER: ${{ github.event.inputs.semver }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            SEMVER="$DISPATCH_SEMVER"
+          else
+            SEMVER="${REF_NAME#git-server-v}"
+          fi
+          if ! echo "$SEMVER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid semver: $SEMVER"
+            exit 1
+          fi
+          MAJOR="${SEMVER%%.*}"
+          MINOR_PART="${SEMVER#*.}"
+          MINOR_PART="${MINOR_PART%.*}"
+          echo "semver=$SEMVER" >> "$GITHUB_OUTPUT"
+          echo "major=$MAJOR"   >> "$GITHUB_OUTPUT"
+          echo "minor=${MAJOR}.${MINOR_PART}" >> "$GITHUB_OUTPUT"
+
+      - name: Build matrix from versions.json
+        id: matrix
+        run: |
+          set -euo pipefail
+          F=git-server/versions.json
+          BUILD=$(jq -c '
+            [ .alpine[] as $a |
+              { arch: "amd64", runs_on: "ubuntu-latest",   alpine: $a },
+              { arch: "arm64", runs_on: "ubuntu-24.04-arm", alpine: $a }
+            ] | { include: . }
+          ' "$F")
+          COMBO=$(jq -c '
+            [ .alpine[] as $a | { alpine: $a } ]
+            | { include: . }
+          ' "$F")
+          echo "build_matrix=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "combo_matrix=$COMBO" >> "$GITHUB_OUTPUT"
+          echo "default_alpine=$(jq -r .default_alpine "$F")" >> "$GITHUB_OUTPUT"
+          echo "alpines=$(jq -c .alpine "$F")" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: setup
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.build_matrix) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+        with:
+          context: git-server
+          file: git-server/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          provenance: false
+          build-args: |
+            ALPINE_VERSION=${{ matrix.alpine }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=git-server-${{ matrix.alpine }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=git-server-${{ matrix.alpine }}-${{ matrix.arch }},mode=max
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          ALPINE: ${{ matrix.alpine }}
+        run: |
+          set -euo pipefail
+          DIR="/tmp/digests/alpine${ALPINE}"
+          mkdir -p "$DIR"
+          touch "${DIR}/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: digests-alpine${{ matrix.alpine }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.combo_matrix) }}
+    steps:
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download digests for this combo
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: /tmp/digests
+          pattern: digests-alpine${{ matrix.alpine }}-*
+          merge-multiple: true
+
+      - name: Create multi-arch manifest with all tags
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          SEMVER: ${{ needs.setup.outputs.semver }}
+          MAJOR: ${{ needs.setup.outputs.major }}
+          MINOR: ${{ needs.setup.outputs.minor }}
+          ALPINE: ${{ matrix.alpine }}
+        run: |
+          set -euo pipefail
+          SUFFIX="alpine${ALPINE}"
+          TAG_ARGS=()
+          for T in "${SEMVER}-${SUFFIX}" "${MINOR}-${SUFFIX}" "${MAJOR}-${SUFFIX}" "${SUFFIX}"; do
+            TAG_ARGS+=( -t "${IMAGE}:${T}" )
+          done
+          SOURCES=()
+          cd /tmp/digests/alpine${ALPINE}
+          for D in *; do
+            SOURCES+=( "${IMAGE}@sha256:${D}" )
+          done
+          if [ ${#SOURCES[@]} -eq 0 ]; then
+            echo "::error::No digests found for combo"
+            exit 1
+          fi
+          echo "Creating manifest for ${SUFFIX} with ${#SOURCES[@]} arch(es)"
+          docker buildx imagetools create "${TAG_ARGS[@]}" "${SOURCES[@]}"
+
+  aliases:
+    needs: [setup, merge]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create rolling aliases
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          SEMVER: ${{ needs.setup.outputs.semver }}
+          MAJOR: ${{ needs.setup.outputs.major }}
+          MINOR: ${{ needs.setup.outputs.minor }}
+          DEF_ALPINE: ${{ needs.setup.outputs.default_alpine }}
+          ALPINES: ${{ needs.setup.outputs.alpines }}
+        run: |
+          set -euo pipefail
+          alias_to() {
+            local SRC=$1; local DST=$2
+            echo "alias: ${DST} -> ${SRC}"
+            docker buildx imagetools create --tag "${IMAGE}:${DST}" "${IMAGE}:${SRC}"
+          }
+          DEFAULT_SRC="${SEMVER}-alpine${DEF_ALPINE}"
+          alias_to "$DEFAULT_SRC" "latest"
+          alias_to "$DEFAULT_SRC" "${SEMVER}"
+          alias_to "$DEFAULT_SRC" "${MINOR}"
+          alias_to "$DEFAULT_SRC" "${MAJOR}"
+          for A in $(echo "$ALPINES" | jq -r '.[]'); do
+            SRC="${SEMVER}-alpine${A}"
+            alias_to "$SRC" "latest-alpine${A}"
+          done
+
+      - name: Verify multi-arch manifest
+        env:
+          IMAGE: ${{ env.IMAGE }}
+        run: |
+          set -euo pipefail
+          echo "=== latest ==="
+          docker buildx imagetools inspect "${IMAGE}:latest" | tee /tmp/latest.txt
+          grep -q 'linux/amd64' /tmp/latest.txt
+          grep -q 'linux/arm64' /tmp/latest.txt

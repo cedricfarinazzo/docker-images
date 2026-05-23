@@ -1,0 +1,12 @@
+{
+  "name": "git-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Self-hosted git server: gitolite ACLs over SSH + nginx smart-http on alpine",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cedricfarinazzo/docker-images.git",
+    "directory": "git-server"
+  },
+  "license": "MIT"
+}

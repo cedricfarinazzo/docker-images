@@ -10,6 +10,7 @@ Monorepo of public Docker images published to `ghcr.io/cedricfarinazzo/<image>`.
 
 - `py-ta-lib/` — first image. Python + TA-Lib **C library** (no Python binding — downstream pins its own `pip install ta-lib`). Matrix of python × talib × distro. Build toolchain (`build-essential` / `build-base`) is kept in the image so downstream `pip install ta-lib` works without extra apt/apk.
 - `tftp-hpa/` — TFTP server (`tftp-hpa`) on Alpine. Single Dockerfile, alpine version is the only image axis (plus arch). Runs `in.tftpd` foreground; serves `/data`.
+- `git-server/` — Self-hosted git server (gitolite over SSH + nginx smart-HTTP, no web UI). Single Dockerfile on Alpine with s6-overlay supervising sshd / nginx / fcgiwrap. Image carries a `rootfs/` tree merged into the container (`/etc/ssh/sshd_config.d/`, `/etc/nginx/http.d/`, `/etc/s6-overlay/`, `/etc/cont-init.d/`, CGI shim under `/usr/local/bin/`). SSH and HTTP share the **same** gitolite ACL via `REMOTE_USER`.
 - `.github/workflows/` — CI: release (root), per-image build (on tag dispatch), per-image nightly rebuild.
 - `package.json` — workspace root, declares image dirs in `workspaces` and holds `semantic-release` + `semantic-release-monorepo` devDependencies. Release CI uses `bun`.
 

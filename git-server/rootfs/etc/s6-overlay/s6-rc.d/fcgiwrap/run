@@ -1,0 +1,4 @@
+#!/bin/sh
+# Run fcgiwrap as the `git` user so gitolite-shell + git-http-backend
+# can read/write under /var/lib/gitolite without privilege gymnastics.
+exec s6-setuidgid git fcgiwrap -f -s "unix:/run/fcgiwrap/fcgiwrap.sock"

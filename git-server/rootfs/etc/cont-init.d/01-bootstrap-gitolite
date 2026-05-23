@@ -1,0 +1,56 @@
+#!/bin/sh
+# One-shot bootstrap. Runs before s6 brings the services up.
+#
+# Responsibilities:
+#  * persist sshd host keys on a volume (/etc/ssh/host_keys), generate on
+#    first boot
+#  * initialise gitolite (creates ~git/.gitolite, the admin repo, the
+#    initial keydir) the first time /var/lib/gitolite is empty
+#  * make sure file ownership is sane after a volume mount
+
+set -eu
+
+HOST_KEY_DIR=/etc/ssh/host_keys
+GITOLITE_HOME=${GITOLITE_HOME:-/var/lib/gitolite}
+GITOLITE_ADMIN_USER=${GITOLITE_ADMIN_USER:-admin}
+
+mkdir -p "$HOST_KEY_DIR"
+for type in ed25519 rsa ecdsa; do
+    KEY="$HOST_KEY_DIR/ssh_host_${type}_key"
+    if [ ! -f "$KEY" ]; then
+        echo "[init] generating sshd host key: $KEY"
+        ssh-keygen -q -t "$type" -N "" -f "$KEY"
+    fi
+done
+chmod 600 "$HOST_KEY_DIR"/ssh_host_*_key
+chmod 644 "$HOST_KEY_DIR"/ssh_host_*_key.pub
+
+# Make sure the gitolite home dir is owned by the git user (volumes mount
+# as root:root by default).
+chown -R git:git "$GITOLITE_HOME"
+mkdir -p /run/fcgiwrap
+chown -R git:git /run/fcgiwrap
+
+# Bootstrap gitolite on first run.
+if [ ! -d "$GITOLITE_HOME/repositories" ]; then
+    if [ -z "${GITOLITE_ADMIN_KEY:-}" ]; then
+        echo "[init] ERROR: GITOLITE_ADMIN_KEY is unset and gitolite is not initialised." >&2
+        echo "[init] Pass the admin SSH pubkey via the GITOLITE_ADMIN_KEY env var on the first run." >&2
+        exit 1
+    fi
+    echo "[init] bootstrapping gitolite (admin user: $GITOLITE_ADMIN_USER)"
+    KEY_FILE="/tmp/${GITOLITE_ADMIN_USER}.pub"
+    printf '%s\n' "$GITOLITE_ADMIN_KEY" > "$KEY_FILE"
+    chown git:git "$KEY_FILE"
+    su -s /bin/sh git -c "gitolite setup -pk '$KEY_FILE'"
+    rm -f "$KEY_FILE"
+else
+    echo "[init] gitolite already initialised at $GITOLITE_HOME, skipping bootstrap"
+fi
+
+# Touch htpasswd so nginx doesn't 500 if the operator forgot to mount one.
+if [ ! -f /etc/nginx/git.htpasswd ]; then
+    echo "[init] /etc/nginx/git.htpasswd missing; creating empty (HTTP will reject everyone)"
+    : > /etc/nginx/git.htpasswd
+fi
+chmod 644 /etc/nginx/git.htpasswd

@@ -1,0 +1,25 @@
+#!/bin/sh
+# CGI wrapper invoked by fcgiwrap for smart-http requests.
+#
+# nginx sets REMOTE_USER (from HTTP basic-auth) + PATH_INFO + the gitolite
+# env vars. gitolite-shell, when invoked with REMOTE_USER set, runs in HTTP
+# mode: it parses PATH_INFO to find the repo, checks the ACL for REMOTE_USER,
+# and execs git-http-backend if allowed.
+
+set -eu
+
+export GITOLITE_HTTP_HOME="${GITOLITE_HTTP_HOME:-/var/lib/gitolite}"
+export GIT_PROJECT_ROOT="${GIT_PROJECT_ROOT:-/var/lib/gitolite/repositories}"
+export GIT_HTTP_EXPORT_ALL=
+
+# Locate gitolite-shell. Alpine's package puts it on PATH; allow override.
+SHELL_BIN="${GITOLITE_SHELL:-$(command -v gitolite-shell || true)}"
+if [ -z "$SHELL_BIN" ]; then
+    echo "Status: 500 Internal Server Error"
+    echo "Content-Type: text/plain"
+    echo
+    echo "gitolite-shell not found on PATH"
+    exit 1
+fi
+
+exec "$SHELL_BIN"

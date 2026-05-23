@@ -1,0 +1,162 @@
+name: nightly-git-server
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-git-server
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/cedricfarinazzo/git-server
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      build_matrix: ${{ steps.matrix.outputs.build_matrix }}
+      combo_matrix: ${{ steps.matrix.outputs.combo_matrix }}
+      date: ${{ steps.matrix.outputs.date }}
+      default_alpine: ${{ steps.matrix.outputs.default_alpine }}
+      alpines: ${{ steps.matrix.outputs.alpines }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Build matrix from versions.json
+        id: matrix
+        run: |
+          set -euo pipefail
+          F=git-server/versions.json
+          BUILD=$(jq -c '
+            [ .alpine[] as $a |
+              { arch: "amd64", runs_on: "ubuntu-latest",   alpine: $a },
+              { arch: "arm64", runs_on: "ubuntu-24.04-arm", alpine: $a }
+            ] | { include: . }
+          ' "$F")
+          COMBO=$(jq -c '
+            [ .alpine[] as $a | { alpine: $a } ]
+            | { include: . }
+          ' "$F")
+          echo "build_matrix=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "combo_matrix=$COMBO" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "default_alpine=$(jq -r .default_alpine "$F")" >> "$GITHUB_OUTPUT"
+          echo "alpines=$(jq -c .alpine "$F")" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: setup
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.build_matrix) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest (no cache)
+        id: build
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+        with:
+          context: git-server
+          file: git-server/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          pull: true
+          no-cache: true
+          provenance: false
+          build-args: |
+            ALPINE_VERSION=${{ matrix.alpine }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          ALPINE: ${{ matrix.alpine }}
+        run: |
+          set -euo pipefail
+          DIR="/tmp/digests/alpine${ALPINE}"
+          mkdir -p "$DIR"
+          touch "${DIR}/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: digests-alpine${{ matrix.alpine }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.combo_matrix) }}
+    steps:
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download digests for this combo
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: /tmp/digests
+          pattern: digests-alpine${{ matrix.alpine }}-*
+          merge-multiple: true
+
+      - name: Create multi-arch manifest with nightly tags
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          DATE: ${{ needs.setup.outputs.date }}
+          ALPINE: ${{ matrix.alpine }}
+        run: |
+          set -euo pipefail
+          SUFFIX="alpine${ALPINE}"
+          TAG_ARGS=( -t "${IMAGE}:nightly-${SUFFIX}" -t "${IMAGE}:nightly-${DATE}-${SUFFIX}" )
+          SOURCES=()
+          cd /tmp/digests/alpine${ALPINE}
+          for D in *; do
+            SOURCES+=( "${IMAGE}@sha256:${D}" )
+          done
+          if [ ${#SOURCES[@]} -eq 0 ]; then
+            echo "::error::No digests found for combo"
+            exit 1
+          fi
+          docker buildx imagetools create "${TAG_ARGS[@]}" "${SOURCES[@]}"
+
+  aliases:
+    needs: [setup, merge]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create nightly rolling aliases
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          DEF_ALPINE: ${{ needs.setup.outputs.default_alpine }}
+          ALPINES: ${{ needs.setup.outputs.alpines }}
+        run: |
+          set -euo pipefail
+          alias_to() {
+            local SRC=$1; local DST=$2
+            echo "alias: ${DST} -> ${SRC}"
+            docker buildx imagetools create --tag "${IMAGE}:${DST}" "${IMAGE}:${SRC}"
+          }
+          DEFAULT_SRC="nightly-alpine${DEF_ALPINE}"
+          alias_to "$DEFAULT_SRC" "nightly"
