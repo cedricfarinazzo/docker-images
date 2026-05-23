@@ -9,6 +9,7 @@ ARG TALIB_VERSION=0.6.4
 ARG TALIB_SHA256=aa04066d17d69c73b1baaef0883414d3d56ab3775872d82916d1cdb376a3ae86
 
 RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
  && apt-get install -y --no-install-recommends \
       build-essential \
       wget \
@@ -35,6 +36,11 @@ ENV PYTHONUNBUFFERED=1 \
     LD_LIBRARY_PATH=/usr/lib \
     TA_LIBRARY_PATH=/usr/lib \
     TA_INCLUDE_PATH=/usr/include
+
+# Pick up upstream debian patches that landed since python:slim was cut.
+RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/*
 
 # Bring TA-Lib runtime + headers + ta-lib-config into a clean image. No
 # build-essential, no wget. Downstream callers that need to `pip install

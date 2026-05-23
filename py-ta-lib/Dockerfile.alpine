@@ -6,7 +6,8 @@ FROM python:${PYTHON_VERSION}-alpine AS builder
 ARG TALIB_VERSION=0.6.4
 ARG TALIB_SHA256=aa04066d17d69c73b1baaef0883414d3d56ab3775872d82916d1cdb376a3ae86
 
-RUN apk add --no-cache --virtual .build \
+RUN apk upgrade --no-cache \
+ && apk add --no-cache --virtual .build \
       build-base \
       wget \
       ca-certificates \
@@ -33,9 +34,11 @@ ENV PYTHONUNBUFFERED=1 \
     TA_LIBRARY_PATH=/usr/lib \
     TA_INCLUDE_PATH=/usr/include
 
+# Pick up upstream alpine patches that landed since python:alpine was cut.
 # libstdc++ is the only runtime requirement TA-Lib pulls in on musl;
 # everything else is build-time.
-RUN apk add --no-cache libstdc++
+RUN apk upgrade --no-cache \
+ && apk add --no-cache libstdc++
 
 COPY --from=builder /opt/ta-lib/lib/libta_lib.so*  /usr/lib/
 COPY --from=builder /opt/ta-lib/lib/libta_lib.a    /usr/lib/
