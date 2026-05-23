@@ -21,6 +21,7 @@ Image directories sit **at the repo root** — there is no `images/` wrapper.
 - **Matrix metadata** lives in `<image>/versions.json` — single source of truth. Workflows read it to expand build matrices. To add a python or distro variant, edit `versions.json`, do not edit the workflow.
 - **Tag scheme** for built images: `<semver>-py<pyver>-ta<taver>-<distro>` plus rolling aliases (see image README). `ta<ver>` is the **C library** version shipped in the image; the Python binding version is whatever the downstream caller pins.
 - **License**: MIT (root `LICENSE`).
+- **GitHub Actions pinned by SHA**: every `uses:` in `.github/workflows/*.yml` is pinned to a full 40-char commit SHA, with the human-readable tag in a trailing comment, e.g. `actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4`. Mutable tags like `@v4` are forbidden — they let action authors silently re-point to new code. Renovate's `github-actions` manager recognises the `<owner>/<repo>@<sha> # <tag>` pattern and bumps both the SHA and the comment when new tags ship.
 
 ## How releases work
 
@@ -114,7 +115,15 @@ Append `"<name>"` to `workspaces` in root `package.json`.
 
 #### `.github/workflows/build-<name>.yml`
 
-Copy `build-py-ta-lib.yml`. Adjust:
+Copy `build-py-ta-lib.yml`. **Keep the SHA pins on every `uses:` line** — don't replace them with `@v<N>` tags. If you need a new action, resolve its SHA first:
+
+```bash
+gh api repos/<owner>/<repo>/git/refs/tags/<tag> --jq '.object.sha'
+```
+
+then write it as `uses: <owner>/<repo>@<sha> # <tag>`. Renovate will keep both in sync going forward.
+
+Adjust:
 
 - `name:` → `build-<name>`
 - `on.push.tags` → `<name>-v*.*.*`
