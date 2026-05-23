@@ -1,3 +1,10 @@
+# [py-ta-lib-v3.0.1](https://github.com/cedricfarinazzo/docker-images/compare/py-ta-lib-v3.0.0...py-ta-lib-v3.0.1) (2026-05-23)
+
+
+### Bug Fixes
+
+* **py-ta-lib:** silence pip root-user warning by default ([450cd76](https://github.com/cedricfarinazzo/docker-images/commit/450cd766dd44b35df23df83872f8d71f2dd3f114))
+
 # [py-ta-lib-v3.0.0](https://github.com/cedricfarinazzo/docker-images/compare/py-ta-lib-v2.0.0...py-ta-lib-v3.0.0) (2026-05-23)
 
 
