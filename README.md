@@ -73,6 +73,3 @@ MIT — see [LICENSE](./LICENSE).
 - [`.github/workflows/README.md`](./.github/workflows/README.md) — CI workflow reference.
 - [`<image>/`](./py-ta-lib) — per-image source (Dockerfiles, `versions.json`, README).
 
-## Tracking
-
-Tracked in Jira: [VC-105 — Create cedricfarinazzo/docker-images monorepo (incl. py-ta-lib)](https://sedinfra.atlassian.net/browse/VC-105). New images and matrix expansions land as child tickets under the `VC` project.

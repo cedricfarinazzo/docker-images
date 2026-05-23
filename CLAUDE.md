@@ -62,6 +62,3 @@ Image directories sit **at the repo root** — there is no `images/` wrapper.
 - [`.github/workflows/README.md`](./.github/workflows/README.md) — workflows reference
 - [`py-ta-lib/README.md`](./py-ta-lib/README.md) — py-ta-lib image details
 
-## Jira
-
-[VC-105](https://sedinfra.atlassian.net/browse/VC-105) — origin story for this repo.

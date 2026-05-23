@@ -36,7 +36,7 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 
 ### Features
 
-* **py-ta-lib:** scaffold monorepo with py-ta-lib image (VC-105) ([934471c](https://github.com/cedricfarinazzo/docker-images/commit/934471c5ed89ef55aedf71f1dd9da26163073d0a))
+* **py-ta-lib:** scaffold monorepo with py-ta-lib image ([934471c](https://github.com/cedricfarinazzo/docker-images/commit/934471c5ed89ef55aedf71f1dd9da26163073d0a))
 
 # py-ta-lib 1.0.0 (2026-05-23)
 
@@ -50,4 +50,4 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 
 ### Features
 
-* **py-ta-lib:** scaffold monorepo with py-ta-lib image (VC-105) ([934471c](https://github.com/cedricfarinazzo/docker-images/commit/934471c5ed89ef55aedf71f1dd9da26163073d0a))
+* **py-ta-lib:** scaffold monorepo with py-ta-lib image ([934471c](https://github.com/cedricfarinazzo/docker-images/commit/934471c5ed89ef55aedf71f1dd9da26163073d0a))
