@@ -19,6 +19,7 @@ Prebuilt public Docker images on **[ghcr.io/cedricfarinazzo](https://github.com/
 | Image | What | Quick pull |
 |-------|------|------------|
 | [`py-ta-lib`](./py-ta-lib) | Python `3.12` / `3.13` / `3.14` + [TA-Lib](https://ta-lib.org/) C library `0.6.4` + build toolchain. The `ta-lib` Python binding is **not** preinstalled (release cadence is independent of the C lib — pin it yourself). Debian-slim and Alpine variants. | `docker pull ghcr.io/cedricfarinazzo/py-ta-lib:latest` |
+| [`tftp-hpa`](./tftp-hpa) | TFTP server (`tftp-hpa`) + `tcpdump` on Alpine `3.23`. Multi-arch. Volume at `/data`, exposes UDP 69. | `docker pull ghcr.io/cedricfarinazzo/tftp-hpa:latest` |
 
 Each image directory has its own `README.md` with the full tag list, supported build args, and downstream recipes.
 

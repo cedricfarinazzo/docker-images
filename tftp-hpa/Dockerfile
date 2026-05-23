@@ -1,0 +1,18 @@
+ARG ALPINE_VERSION=3.23
+FROM alpine:${ALPINE_VERSION}
+
+RUN apk add --no-cache \
+      tftp-hpa \
+      tcpdump \
+ && mkdir -p /data
+
+VOLUME ["/data"]
+EXPOSE 69/udp
+
+CMD ["in.tftpd", "-L", "-vvv", "-u", "root", "--secure", "--create", "/data"]
+
+LABEL org.opencontainers.image.source="https://github.com/cedricfarinazzo/docker-images" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.title="tftp-hpa" \
+      org.opencontainers.image.description="TFTP server (tftp-hpa) + tcpdump on alpine ${ALPINE_VERSION}" \
+      io.cedricfarinazzo.alpine-version="${ALPINE_VERSION}"

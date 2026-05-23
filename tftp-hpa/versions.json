@@ -1,0 +1,4 @@
+{
+  "alpine": ["3.23"],
+  "default_alpine": "3.23"
+}

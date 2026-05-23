@@ -1,0 +1,12 @@
+{
+  "name": "tftp-hpa",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TFTP server (tftp-hpa) + tcpdump on alpine, multi-arch",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cedricfarinazzo/docker-images.git",
+    "directory": "tftp-hpa"
+  },
+  "license": "MIT"
+}
