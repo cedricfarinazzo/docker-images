@@ -1,3 +1,10 @@
+# [git-server-v2.0.1](https://github.com/cedricfarinazzo/docker-images/compare/git-server-v2.0.0...git-server-v2.0.1) (2026-05-23)
+
+
+### Bug Fixes
+
+* **git-server:** apk upgrade in s6-builder + runtime stages ([5b011e9](https://github.com/cedricfarinazzo/docker-images/commit/5b011e911d21a0af661f550ae356e811196f5f9b))
+
 # [git-server-v2.0.0](https://github.com/cedricfarinazzo/docker-images/compare/git-server-v1.0.1...git-server-v2.0.0) (2026-05-23)
 
 
