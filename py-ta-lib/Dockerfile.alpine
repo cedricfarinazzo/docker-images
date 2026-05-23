@@ -8,10 +8,8 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
-RUN apk add --no-cache --virtual .build \
-      build-base \
-      wget \
-      ca-certificates \
+RUN apk add --no-cache build-base \
+ && apk add --no-cache --virtual .fetch wget ca-certificates \
  && wget https://github.com/ta-lib/ta-lib/releases/download/v${TALIB_VERSION}/ta-lib-${TALIB_VERSION}-src.tar.gz \
  && tar -xvzf ta-lib-${TALIB_VERSION}-src.tar.gz \
  && cd ta-lib-${TALIB_VERSION} \
@@ -20,15 +18,12 @@ RUN apk add --no-cache --virtual .build \
  && make install \
  && cd .. \
  && rm -rf ta-lib-${TALIB_VERSION} ta-lib-${TALIB_VERSION}-src.tar.gz \
- && apk add --no-cache --virtual .pybuild build-base \
- && pip install --no-cache-dir "ta-lib==${TALIB_VERSION}" \
- && apk del .build .pybuild \
- && apk add --no-cache libstdc++
+ && apk del .fetch
 
 LABEL org.opencontainers.image.source="https://github.com/cedricfarinazzo/docker-images" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.title="py-ta-lib" \
-      org.opencontainers.image.description="Python ${PYTHON_VERSION} (alpine) + TA-Lib ${TALIB_VERSION}" \
+      org.opencontainers.image.description="Python ${PYTHON_VERSION} (alpine) + TA-Lib C library ${TALIB_VERSION} + build toolchain" \
       io.cedricfarinazzo.python-version="${PYTHON_VERSION}" \
       io.cedricfarinazzo.talib-version="${TALIB_VERSION}" \
       io.cedricfarinazzo.distro="alpine"

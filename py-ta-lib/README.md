@@ -1,6 +1,8 @@
 # py-ta-lib
 
-Python image with the [TA-Lib](https://ta-lib.org/) C library pre-built and the `ta-lib` Python binding installed. Built as a matrix of Python versions × TA-Lib versions × Linux distros, multi-arch (amd64 + arm64).
+Python image with the [TA-Lib](https://ta-lib.org/) C library pre-built and a working C toolchain. The Python binding (`ta-lib` on PyPI) is **not** pre-installed — its release cadence is independent of the C library, so callers pin their own version.
+
+Built as a matrix of Python versions × TA-Lib C versions × Linux distros, multi-arch (amd64 + arm64).
 
 **Registry**: `ghcr.io/cedricfarinazzo/py-ta-lib`
 
@@ -9,8 +11,22 @@ Python image with the [TA-Lib](https://ta-lib.org/) C library pre-built and the 
 ```bash
 docker pull ghcr.io/cedricfarinazzo/py-ta-lib:latest
 docker run --rm ghcr.io/cedricfarinazzo/py-ta-lib:latest \
-  python -c "import talib; print(talib.__version__)"
+  sh -c 'ta-lib-config --version && ls /usr/lib/libta_lib*'
 ```
+
+Verify the Python binding works on top:
+
+```bash
+docker run --rm ghcr.io/cedricfarinazzo/py-ta-lib:latest \
+  sh -c 'pip install ta-lib==0.6.7 && python -c "import talib; print(talib.__version__)"'
+```
+
+## What's in the image
+
+- Python (3.12 / 3.13 / 3.14) from the official `python:<ver>-slim` / `python:<ver>-alpine` base.
+- TA-Lib C library `0.6.4` installed to `/usr` (`libta_lib.so*`, `libta_lib.a`, headers in `/usr/include/ta-lib/`, `ta-lib-config` in `/usr/bin`).
+- Build toolchain (`build-essential` on debian, `build-base` on alpine) — left in place so `pip install ta-lib` works without extra packages.
+- Sensible Python container defaults (`PYTHONUNBUFFERED=1`, `PYTHONDONTWRITEBYTECODE=1`, `PIP_NO_CACHE_DIR=1`, `PIP_DISABLE_PIP_VERSION_CHECK=1`).
 
 ## Matrix
 
@@ -37,6 +53,8 @@ To add a Python version or distro: edit `versions.json` and commit `feat(py-ta-l
 | `<major>.<minor>-py<py>-ta<ta>-<distro>` | `1.0-py3.14-ta0.6.4-debian`   |
 | `<major>-py<py>-ta<ta>-<distro>`         | `1-py3.14-ta0.6.4-debian`     |
 | `py<py>-ta<ta>-<distro>` (rolling)       | `py3.14-ta0.6.4-debian`       |
+
+The `ta<ver>` in the tag is the **C library** version. The Python binding version is decided by the downstream `pip install`.
 
 ### Rolling aliases
 
@@ -67,6 +85,10 @@ The nightly workflow rebuilds the full matrix daily with `--no-cache --pull` to 
 
 ```dockerfile
 FROM ghcr.io/cedricfarinazzo/py-ta-lib:latest
+
+# Pin whichever ta-lib Python binding version you want
+RUN pip install --no-cache-dir ta-lib==0.6.7
+
 COPY . /app
 WORKDIR /app
 RUN pip install -r requirements.txt
@@ -79,15 +101,19 @@ Use only TA-Lib's artefacts in your own image:
 ```dockerfile
 FROM python:3.14-slim
 
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential \
+ && rm -rf /var/lib/apt/lists/*
+
 # Pull only TA-Lib bits, not the rest of /usr
 COPY --from=ghcr.io/cedricfarinazzo/py-ta-lib:py3.14-ta0.6.4-debian /usr/lib/libta_lib.so* /usr/lib/
 COPY --from=ghcr.io/cedricfarinazzo/py-ta-lib:py3.14-ta0.6.4-debian /usr/lib/libta_lib.a   /usr/lib/
 COPY --from=ghcr.io/cedricfarinazzo/py-ta-lib:py3.14-ta0.6.4-debian /usr/include/ta-lib    /usr/include/ta-lib
 
-RUN pip install --no-cache-dir ta-lib==0.6.4
+RUN pip install --no-cache-dir ta-lib==0.6.7
 ```
 
-This avoids inheriting the full base layer when you only need TA-Lib.
+This avoids inheriting the full base layer when you only need the C library.
 
 ## Build args
 
@@ -121,7 +147,7 @@ docker buildx build \
 ## Upstream sources
 
 - TA-Lib C: <https://github.com/ta-lib/ta-lib>
-- ta-lib Python: <https://github.com/TA-Lib/ta-lib-python>
+- ta-lib Python (install yourself): <https://github.com/TA-Lib/ta-lib-python>
 - Python base: <https://hub.docker.com/_/python>
 
 ## License

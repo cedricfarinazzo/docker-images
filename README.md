@@ -18,7 +18,7 @@ Prebuilt public Docker images on **[ghcr.io/cedricfarinazzo](https://github.com/
 
 | Image | What | Quick pull |
 |-------|------|------------|
-| [`py-ta-lib`](./py-ta-lib) | Python `3.12` / `3.13` / `3.14` + [TA-Lib](https://ta-lib.org/) C library `0.6.4` + the `ta-lib` Python binding. Debian-slim and Alpine variants. | `docker pull ghcr.io/cedricfarinazzo/py-ta-lib:latest` |
+| [`py-ta-lib`](./py-ta-lib) | Python `3.12` / `3.13` / `3.14` + [TA-Lib](https://ta-lib.org/) C library `0.6.4` + build toolchain. The `ta-lib` Python binding is **not** preinstalled (release cadence is independent of the C lib — pin it yourself). Debian-slim and Alpine variants. | `docker pull ghcr.io/cedricfarinazzo/py-ta-lib:latest` |
 
 Each image directory has its own `README.md` with the full tag list, supported build args, and downstream recipes.
 
@@ -43,9 +43,10 @@ docker pull ghcr.io/cedricfarinazzo/py-ta-lib:1.0.0-py3.13-ta0.6.4-alpine
 
 ```dockerfile
 FROM python:3.14-slim
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/cedricfarinazzo/py-ta-lib:py3.14-ta0.6.4-debian /usr/lib/libta_lib.*    /usr/lib/
 COPY --from=ghcr.io/cedricfarinazzo/py-ta-lib:py3.14-ta0.6.4-debian /usr/include/ta-lib     /usr/include/ta-lib
-RUN pip install --no-cache-dir ta-lib==0.6.4
+RUN pip install --no-cache-dir ta-lib==0.6.7
 ```
 
 ## Tag conventions
