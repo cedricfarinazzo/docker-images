@@ -1,3 +1,10 @@
+# [py-ta-lib-v3.0.3](https://github.com/cedricfarinazzo/docker-images/compare/py-ta-lib-v3.0.2...py-ta-lib-v3.0.3) (2026-05-23)
+
+
+### Bug Fixes
+
+* **py-ta-lib:** tolerate TA-Lib 0.6.x not shipping libta_lib.a / ta-lib-config ([e8c330e](https://github.com/cedricfarinazzo/docker-images/commit/e8c330e570473ba5dac267131c876c9f0fb33b78))
+
 # [py-ta-lib-v3.0.2](https://github.com/cedricfarinazzo/docker-images/compare/py-ta-lib-v3.0.1...py-ta-lib-v3.0.2) (2026-05-23)
 
 
