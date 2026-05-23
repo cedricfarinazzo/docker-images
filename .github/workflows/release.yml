@@ -30,7 +30,17 @@ jobs:
       - name: Install deps
         run: bun install --frozen-lockfile || bun install
 
-      - name: Run multi-semantic-release
+      - name: Release each workspace package
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bunx multi-semantic-release
+        run: |
+          set -euo pipefail
+          ROOT="$PWD"
+          PKGS=$(jq -r '.workspaces[]' package.json)
+          for PKG in $PKGS; do
+            echo "::group::semantic-release for ${PKG}"
+            cd "$ROOT/$PKG"
+            bunx semantic-release
+            cd "$ROOT"
+            echo "::endgroup::"
+          done
