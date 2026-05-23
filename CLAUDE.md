@@ -18,7 +18,9 @@ Image directories sit **at the repo root** — there is no `images/` wrapper.
 
 ## Conventions
 
-- **Conventional Commits with image-dir scope**: `feat(py-ta-lib): ...`. Scope = directory name. `semantic-release-monorepo` filters commits **by file path** (touches `<pkg>/...`). The scope string is for readability/changelogs; the path filter is what gates per-image bumps.
+- **Conventional Commits — scope MUST be an image folder name**: `feat(py-ta-lib): ...`, `fix(git-server): ...`, `feat(tftp-hpa)!: ...`. The allowed scopes are exactly the entries in the `workspaces` array of root `package.json`. Generic scopes (`security`, `ci`, `docs`, `release`, `repo`, etc.) are wrong and will leave commits out of any image's changelog.
+- **Combining changes across modules is fine.** A single commit may touch files in multiple image directories — `semantic-release-monorepo` filters commits by file path, so each affected image picks the commit up regardless of which one is named in the scope. If the work logically belongs to one image, scope it to that one. If it spans two and you want clean per-image release notes, split into two commits, one per scope.
+- **Cross-cutting repo changes** (root `README.md`, `CLAUDE.md`, `.github/workflows/release.yml`, root `package.json`) can ride along inside an image-scoped commit using the most-affected image as scope, or stand alone as `chore(<image>): ...` / `docs(<image>): ...` if no real bump is wanted (`chore` / `docs` don't bump).
 - **Per-image versioning**: each image has its own semver and `CHANGELOG.md`. Tags: `<image>-v<semver>` (e.g. `py-ta-lib-v1.2.3`).
 - **Matrix metadata** lives in `<image>/versions.json` — single source of truth. Workflows read it to expand build matrices. To add a python or distro variant, edit `versions.json`, do not edit the workflow.
 - **Tag scheme** for built images: `<semver>-py<pyver>-ta<taver>-<distro>` plus rolling aliases (see image README). `ta<ver>` is the **C library** version shipped in the image; the Python binding version is whatever the downstream caller pins.
