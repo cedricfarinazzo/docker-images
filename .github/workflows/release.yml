@@ -13,6 +13,7 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
+  actions: write
 
 jobs:
   release:
@@ -43,4 +44,28 @@ jobs:
             bunx semantic-release
             cd "$ROOT"
             echo "::endgroup::"
+          done
+
+      - name: Dispatch per-image build workflows for new tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          PKGS=$(jq -r '.workspaces[]' package.json)
+          for PKG in $PKGS; do
+            TAG=$(git tag --list "${PKG}-v*" --sort=-version:refname | head -n1)
+            [ -z "$TAG" ] && { echo "no tag for ${PKG}, skipping"; continue; }
+            COMMIT_AT_TAG=$(git rev-list -n1 "$TAG")
+            HEAD_COMMIT=$(git rev-parse HEAD)
+            if [ "$COMMIT_AT_TAG" != "$HEAD_COMMIT" ]; then
+              echo "tag ${TAG} not at HEAD (predates this run), skipping"
+              continue
+            fi
+            SEMVER="${TAG#${PKG}-v}"
+            echo "Dispatching build-${PKG}.yml for ${TAG} (semver=${SEMVER})"
+            gh workflow run "build-${PKG}.yml" \
+              --repo "${{ github.repository }}" \
+              --ref "$TAG" \
+              -f semver="$SEMVER"
           done

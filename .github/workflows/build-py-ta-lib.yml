@@ -1,4 +1,4 @@
-name: build py-ta-lib
+name: build-py-ta-lib
 
 on:
   push:

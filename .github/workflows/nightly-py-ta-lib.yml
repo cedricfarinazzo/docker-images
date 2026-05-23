@@ -1,4 +1,4 @@
-name: nightly py-ta-lib
+name: nightly-py-ta-lib
 
 on:
   schedule:
