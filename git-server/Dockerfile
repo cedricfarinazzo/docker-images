@@ -11,6 +11,7 @@ ARG S6_X86_64_SHA256=8bcbc2cada58426f976b159dcc4e06cbb1454d5f39252b3bb0c778ccf71
 ARG S6_AARCH64_SHA256=c8fd6b1f0380d399422fc986a1e6799f6a287e2cfa24813ad0b6a4fb4fa755cc
 
 RUN set -eux; \
+    apk upgrade --no-cache; \
     apk add --no-cache curl xz; \
     ARCH="$(uname -m)"; \
     case "$ARCH" in \
@@ -31,8 +32,10 @@ FROM alpine:${ALPINE_VERSION}
 
 ARG ALPINE_VERSION
 
-# Runtime packages only — no curl/xz/wget/build-* in the final image.
-RUN apk add --no-cache \
+# Pick up upstream alpine patches that landed since alpine:${ALPINE_VERSION}
+# was cut, then install runtime deps. No curl/xz/wget/build-* in final.
+RUN apk upgrade --no-cache \
+ && apk add --no-cache \
       bash \
       ca-certificates \
       fcgiwrap \
