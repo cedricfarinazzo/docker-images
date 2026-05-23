@@ -1,6 +1,9 @@
 ARG ALPINE_VERSION=3.23
 FROM alpine:${ALPINE_VERSION}
 
+# Re-declare so they're visible to subsequent build stages (ARG declared
+# before FROM is only available to the FROM line itself).
+ARG ALPINE_VERSION
 ARG S6_OVERLAY_VERSION=3.2.1.0
 
 # Install core packages
@@ -36,13 +39,18 @@ RUN set -eux; \
     rm /tmp/s6-noarch.tar.xz /tmp/s6-arch.tar.xz; \
     apk del xz curl
 
-# Create the git user that owns gitolite + serves CGI requests
-# Home = /var/lib/gitolite so the volume mount works cleanly.
+# Normalise the git user that owns gitolite + serves CGI requests.
+# The `gitolite` apk creates the user during its pre-install; we just
+# need to relocate its home dir to /var/lib/gitolite so the volume
+# mount works cleanly and ensure the runtime dirs exist.
 RUN set -eux; \
-    addgroup -S git; \
-    adduser -S -G git -h /var/lib/gitolite -s /bin/sh git; \
+    if ! id -u git >/dev/null 2>&1; then \
+        addgroup -S git; \
+        adduser -S -G git -h /var/lib/gitolite -s /bin/sh git; \
+    fi; \
+    usermod -d /var/lib/gitolite -s /bin/sh git; \
     mkdir -p /var/lib/gitolite /run/sshd /run/fcgiwrap; \
-    chown -R git:git /var/lib/gitolite
+    chown -R git:git /var/lib/gitolite /run/fcgiwrap
 
 # Drop in our config / supervised services / init scripts
 COPY rootfs/ /
