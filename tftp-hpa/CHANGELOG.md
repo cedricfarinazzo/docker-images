@@ -1,3 +1,10 @@
+# [tftp-hpa-v1.0.1](https://github.com/cedricfarinazzo/docker-images/compare/tftp-hpa-v1.0.0...tftp-hpa-v1.0.1) (2026-05-23)
+
+
+### Bug Fixes
+
+* **tftp-hpa:** drop tcpdump from the image ([305b5c7](https://github.com/cedricfarinazzo/docker-images/commit/305b5c778619db52af89248a5a29520af75f2fe5))
+
 # tftp-hpa-v1.0.0 (2026-05-23)
 
 
