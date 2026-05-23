@@ -33,18 +33,121 @@ Image directories sit **at the repo root** — there is no `images/` wrapper.
 
 ## Adding a new image — checklist
 
-1. `mkdir <name>/` at repo root.
-2. Files inside:
-   - `Dockerfile` (or `Dockerfile.<distro>` if multi-distro)
-   - `README.md` — pull command, tag list, downstream usage, build args
-   - `versions.json` — matrix axes + defaults
-   - `package.json` — `{ "name": "<name>", "version": "0.0.0", "private": true }`
-   - `.releaserc.json` — `{ "extends": "semantic-release-monorepo", "branches": ["main"], "plugins": [ "@semantic-release/commit-analyzer", "@semantic-release/release-notes-generator", "@semantic-release/changelog", "@semantic-release/git", "@semantic-release/github" ] }` (must include `commit-analyzer` + `release-notes-generator` so `semantic-release-monorepo` wraps them with the path filter)
-3. Append `<name>` to root `package.json` `workspaces`.
-4. Copy `.github/workflows/build-py-ta-lib.yml` → `build-<name>.yml`, adjust tag prefix + dockerfile paths.
-5. Copy `nightly-py-ta-lib.yml` → `nightly-<name>.yml` if a daily rebuild is wanted.
-6. Update root `README.md` images table.
-7. Initial commit: `feat(<name>): scaffold image`. Once pushed to `main` → release workflow detects + cuts tag → dispatch fires → first build.
+> The workflow filename must be `build-<workspace-name>.yml` (and optionally `nightly-<workspace-name>.yml`). `release.yml`'s dispatch step constructs the filename from the package name, so this is load-bearing.
+
+### 1. Create the image directory
+
+`mkdir <name>/` at repo root. `<name>` is the workspace name (used as scope in commits, in tag prefix `<name>-v...`, in workflow filenames).
+
+### 2. Per-image files
+
+#### `<name>/Dockerfile` (or `Dockerfile.<distro>` per distro)
+
+Single-stage or multi-stage as appropriate. Parameterise with `ARG`s for the axes declared in `versions.json` (e.g. `PYTHON_VERSION`, `TALIB_VERSION`). Add OCI labels at the end:
+
+```dockerfile
+LABEL org.opencontainers.image.source="https://github.com/cedricfarinazzo/docker-images" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.title="<name>"
+```
+
+#### `<name>/versions.json`
+
+```json
+{
+  "<axis1>": ["val1", "val2"],
+  "<axis2>": ["..."],
+  "distros": ["debian", "alpine"],
+  "default_<axis1>": "val1",
+  "default_<axis2>": "...",
+  "default_distro": "debian"
+}
+```
+
+Workflows read this file to expand the build matrix and to decide which combo gets the top-level rolling aliases.
+
+#### `<name>/package.json`
+
+```json
+{
+  "name": "<name>",
+  "version": "0.0.0",
+  "private": true,
+  "description": "<one-liner>",
+  "repository": { "type": "git", "url": "https://github.com/cedricfarinazzo/docker-images.git", "directory": "<name>" },
+  "license": "MIT"
+}
+```
+
+#### `<name>/.releaserc.json`
+
+```json
+{
+  "extends": "semantic-release-monorepo",
+  "branches": ["main"],
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md" }],
+    ["@semantic-release/git", {
+      "assets": ["CHANGELOG.md", "package.json"],
+      "message": "chore(release): ${nextRelease.gitTag} [skip ci]\n\n${nextRelease.notes}"
+    }],
+    "@semantic-release/github"
+  ]
+}
+```
+
+Required: `commit-analyzer` and `release-notes-generator` MUST be in the plugins array. `semantic-release-monorepo` wraps **every plugin in the array** with its path filter — if `commit-analyzer` is absent the filter has nothing to wrap and no commits get classified.
+
+Do **not** pre-create `CHANGELOG.md`. semantic-release writes it on first release.
+
+#### `<name>/README.md`
+
+Pull command, full tag list, downstream usage (incl. narrow-COPY recipe), supported build args, matrix table, upstream sources, license. Copy `py-ta-lib/README.md` as a template.
+
+### 3. Register the workspace
+
+Append `"<name>"` to `workspaces` in root `package.json`.
+
+### 4. Workflow files
+
+#### `.github/workflows/build-<name>.yml`
+
+Copy `build-py-ta-lib.yml`. Adjust:
+
+- `name:` → `build-<name>`
+- `on.push.tags` → `<name>-v*.*.*`
+- `env.IMAGE` → `ghcr.io/cedricfarinazzo/<name>`
+- `setup` step: `F=<name>/versions.json` (both places)
+- `setup` matrix jq: rewrite the axis loops if axes differ from py-ta-lib's `python × talib × distros`. Output objects must still include `arch` + `runs_on` keys.
+- `setup` per-axis output lines: emit the lists needed by the aliases job
+- `build` step `file:` → `<name>/Dockerfile.<distro>` (or `<name>/Dockerfile` if not multi-distro)
+- `build` step `build-args:` → the axes in your `versions.json`
+- `cache-from` / `cache-to` scope → `<name>-...`
+- `merge` job tag computation: rewrite `SUFFIX` and `TAG_ARGS` to match your axes
+- `aliases` job: rewrite the alias generation loops to match the rolling-alias shape you want
+
+#### `.github/workflows/nightly-<name>.yml` (optional)
+
+Copy `nightly-py-ta-lib.yml`. Same adjustments as the build workflow. Drop if a daily rebuild isn't needed.
+
+### 5. Document it
+
+- Add a row to the images table in root `README.md`.
+- Mention the image in this CLAUDE.md `Layout` section.
+
+### 6. First commit
+
+```
+feat(<name>): scaffold image
+```
+
+On push to `main`:
+- `release.yml` detects the new workspace, finds the `feat:` commit touching `<name>/`, cuts tag `<name>-v1.0.0`, publishes the GitHub Release.
+- The dispatch step in `release.yml` calls `gh workflow run build-<name>.yml --ref <name>-v1.0.0 -f semver=1.0.0`.
+- `build-<name>.yml` runs per-arch on native runners, merges into multi-arch manifests, creates aliases.
+- If `nightly-<name>.yml` exists, it kicks in at the next 04:00 UTC cron tick.
 
 ## Commands
 
@@ -58,7 +161,6 @@ Image directories sit **at the repo root** — there is no `images/` wrapper.
 ## Per-dir READMEs
 
 - [`README.md`](./README.md) — public repo intro
-- [`.github/README.md`](./.github/README.md) — what's under `.github/`
 - [`.github/workflows/README.md`](./.github/workflows/README.md) — workflows reference
 - [`py-ta-lib/README.md`](./py-ta-lib/README.md) — py-ta-lib image details
 
