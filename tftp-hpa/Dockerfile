@@ -1,7 +1,8 @@
 ARG ALPINE_VERSION=3.23
 FROM alpine:${ALPINE_VERSION}
 
-RUN apk add --no-cache tftp-hpa \
+RUN apk upgrade --no-cache \
+ && apk add --no-cache tftp-hpa \
  && mkdir -p /data
 
 VOLUME ["/data"]
