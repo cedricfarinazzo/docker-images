@@ -1,3 +1,10 @@
+# [tftp-hpa-v1.0.2](https://github.com/cedricfarinazzo/docker-images/compare/tftp-hpa-v1.0.1...tftp-hpa-v1.0.2) (2026-05-23)
+
+
+### Bug Fixes
+
+* **tftp-hpa:** apk upgrade before installing tftp-hpa ([fcc4ef4](https://github.com/cedricfarinazzo/docker-images/commit/fcc4ef42a1271231cd369d230893c332a5b00e47))
+
 # [tftp-hpa-v1.0.1](https://github.com/cedricfarinazzo/docker-images/compare/tftp-hpa-v1.0.0...tftp-hpa-v1.0.1) (2026-05-23)
 
 
