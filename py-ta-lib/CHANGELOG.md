@@ -1,3 +1,20 @@
+# [py-ta-lib-v2.0.0](https://github.com/cedricfarinazzo/docker-images/compare/py-ta-lib-v1.1.0...py-ta-lib-v2.0.0) (2026-05-23)
+
+
+* feat(py-ta-lib)!: ship only the TA-Lib C library, no Python binding ([dc892b6](https://github.com/cedricfarinazzo/docker-images/commit/dc892b6bbe6fc1a7d08246b385abde6df04a2714))
+
+
+### BREAKING CHANGES
+
+* `ta-lib` is no longer importable out of the box.
+Existing `Dockerfile`s and `docker run` invocations that assumed
+`import talib` works on the bare image will fail. Migration:
+add `RUN pip install --no-cache-dir ta-lib==<version>` to your
+downstream Dockerfile (the build toolchain needed to compile the
+C extension is still in the image).
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
 # [py-ta-lib-v1.1.0](https://github.com/cedricfarinazzo/docker-images/compare/py-ta-lib-v1.0.0...py-ta-lib-v1.1.0) (2026-05-23)
 
 
