@@ -1,6 +1,6 @@
 # tftp-hpa
 
-Minimal TFTP server image based on [tftp-hpa](https://git.kernel.org/pub/scm/network/tftp/tftp-hpa.git/) on Alpine. Bundles `tcpdump` so you can diagnose UDP-69 traffic from inside the container. Multi-arch (`linux/amd64` + `linux/arm64`).
+Minimal TFTP server image based on [tftp-hpa](https://git.kernel.org/pub/scm/network/tftp/tftp-hpa.git/) on Alpine. Multi-arch (`linux/amd64` + `linux/arm64`).
 
 **Registry**: `ghcr.io/cedricfarinazzo/tftp-hpa`
 
@@ -28,17 +28,10 @@ docker run --rm -it -p 69:69/udp -v $(pwd)/tftp-root:/data \
   in.tftpd -L -v -u root --secure /data           # read-only, no --create
 ```
 
-## Sniff traffic from inside the container
-
-```bash
-docker exec -it tftp tcpdump -i any -nn 'udp port 69'
-```
-
 ## What's in the image
 
 - Alpine `3.23` (axis, see `versions.json`).
 - `tftp-hpa` from the Alpine community repo.
-- `tcpdump` from the Alpine main repo.
 - Volume mount point at `/data`.
 - `EXPOSE 69/udp`.
 
@@ -102,9 +95,8 @@ The default `CMD` runs `in.tftpd` as `root` inside the container with `--create`
 ## Upstream sources
 
 - tftp-hpa: <https://git.kernel.org/pub/scm/network/tftp/tftp-hpa.git/>
-- tcpdump: <https://www.tcpdump.org/>
 - Alpine base: <https://hub.docker.com/_/alpine>
 
 ## License
 
-MIT. tftp-hpa is BSD-licensed; tcpdump is BSD-licensed; see upstream.
+MIT. tftp-hpa is BSD-licensed; see upstream.
