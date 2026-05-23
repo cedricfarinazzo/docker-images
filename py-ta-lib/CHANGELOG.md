@@ -1,3 +1,10 @@
+# [py-ta-lib-v1.1.0](https://github.com/cedricfarinazzo/docker-images/compare/py-ta-lib-v1.0.0...py-ta-lib-v1.1.0) (2026-05-23)
+
+
+### Features
+
+* **py-ta-lib:** set Python container hygiene env vars by default ([6f85557](https://github.com/cedricfarinazzo/docker-images/commit/6f855572310ebee4f5cb1146c326503bcd452c64))
+
 # py-ta-lib-v1.0.0 (2026-05-23)
 
 
