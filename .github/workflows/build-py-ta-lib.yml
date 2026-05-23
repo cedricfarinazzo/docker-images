@@ -25,7 +25,8 @@ jobs:
       semver: ${{ steps.parse.outputs.semver }}
       major: ${{ steps.parse.outputs.major }}
       minor: ${{ steps.parse.outputs.minor }}
-      matrix: ${{ steps.matrix.outputs.matrix }}
+      build_matrix: ${{ steps.matrix.outputs.build_matrix }}
+      combo_matrix: ${{ steps.matrix.outputs.combo_matrix }}
       default_python: ${{ steps.matrix.outputs.default_python }}
       default_talib: ${{ steps.matrix.outputs.default_talib }}
       default_distro: ${{ steps.matrix.outputs.default_distro }}
@@ -64,12 +65,21 @@ jobs:
         run: |
           set -euo pipefail
           F=py-ta-lib/versions.json
-          MATRIX=$(jq -c '
+          # build_matrix: per-combo per-arch (amd64 on ubuntu-latest, arm64 on ubuntu-24.04-arm)
+          BUILD=$(jq -c '
+            [ .python[] as $p | .talib[] as $t | .distros[] as $d |
+              { arch: "amd64", runs_on: "ubuntu-latest",   python: $p, talib: $t, distro: $d },
+              { arch: "arm64", runs_on: "ubuntu-24.04-arm", python: $p, talib: $t, distro: $d }
+            ] | { include: . }
+          ' "$F")
+          # combo_matrix: per-combo (no arch); used by the merge job
+          COMBO=$(jq -c '
             [ .python[] as $p | .talib[] as $t | .distros[] as $d |
               { python: $p, talib: $t, distro: $d } ]
             | { include: . }
           ' "$F")
-          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "build_matrix=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "combo_matrix=$COMBO" >> "$GITHUB_OUTPUT"
           echo "default_python=$(jq -r .default_python "$F")" >> "$GITHUB_OUTPUT"
           echo "default_talib=$(jq -r .default_talib "$F")"   >> "$GITHUB_OUTPUT"
           echo "default_distro=$(jq -r .default_distro "$F")" >> "$GITHUB_OUTPUT"
@@ -79,14 +89,13 @@ jobs:
 
   build:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+      matrix: ${{ fromJson(needs.setup.outputs.build_matrix) }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -95,8 +104,62 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute tags
-        id: tags
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: py-ta-lib
+          file: py-ta-lib/Dockerfile.${{ matrix.distro }}
+          platforms: linux/${{ matrix.arch }}
+          provenance: false
+          build-args: |
+            PYTHON_VERSION=${{ matrix.python }}
+            TALIB_VERSION=${{ matrix.talib }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=py-ta-lib-${{ matrix.python }}-${{ matrix.talib }}-${{ matrix.distro }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=py-ta-lib-${{ matrix.python }}-${{ matrix.talib }}-${{ matrix.distro }}-${{ matrix.arch }},mode=max
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PY: ${{ matrix.python }}
+          TA: ${{ matrix.talib }}
+          DISTRO: ${{ matrix.distro }}
+        run: |
+          set -euo pipefail
+          DIR="/tmp/digests/py${PY}-ta${TA}-${DISTRO}"
+          mkdir -p "$DIR"
+          touch "${DIR}/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-py${{ matrix.python }}-ta${{ matrix.talib }}-${{ matrix.distro }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.combo_matrix) }}
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download digests for this combo
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-py${{ matrix.python }}-ta${{ matrix.talib }}-${{ matrix.distro }}-*
+          merge-multiple: true
+
+      - name: Create multi-arch manifest with all tags
         env:
           IMAGE: ${{ env.IMAGE }}
           SEMVER: ${{ needs.setup.outputs.semver }}
@@ -108,31 +171,24 @@ jobs:
         run: |
           set -euo pipefail
           SUFFIX="py${PY}-ta${TA}-${DISTRO}"
-          {
-            echo "tags<<EOF"
-            echo "${IMAGE}:${SEMVER}-${SUFFIX}"
-            echo "${IMAGE}:${MINOR}-${SUFFIX}"
-            echo "${IMAGE}:${MAJOR}-${SUFFIX}"
-            echo "${IMAGE}:${SUFFIX}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: py-ta-lib
-          file: py-ta-lib/Dockerfile.${{ matrix.distro }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          provenance: false
-          build-args: |
-            PYTHON_VERSION=${{ matrix.python }}
-            TALIB_VERSION=${{ matrix.talib }}
-          tags: ${{ steps.tags.outputs.tags }}
-          cache-from: type=gha,scope=py-ta-lib-${{ matrix.python }}-${{ matrix.talib }}-${{ matrix.distro }}
-          cache-to: type=gha,scope=py-ta-lib-${{ matrix.python }}-${{ matrix.talib }}-${{ matrix.distro }},mode=max
+          TAG_ARGS=()
+          for T in "${SEMVER}-${SUFFIX}" "${MINOR}-${SUFFIX}" "${MAJOR}-${SUFFIX}" "${SUFFIX}"; do
+            TAG_ARGS+=( -t "${IMAGE}:${T}" )
+          done
+          SOURCES=()
+          cd /tmp/digests/py${PY}-ta${TA}-${DISTRO}
+          for D in *; do
+            SOURCES+=( "${IMAGE}@sha256:${D}" )
+          done
+          if [ ${#SOURCES[@]} -eq 0 ]; then
+            echo "::error::No digests found for combo"
+            exit 1
+          fi
+          echo "Creating manifest for ${SUFFIX} with ${#SOURCES[@]} arch(es)"
+          docker buildx imagetools create "${TAG_ARGS[@]}" "${SOURCES[@]}"
 
   aliases:
-    needs: [setup, build]
+    needs: [setup, merge]
     runs-on: ubuntu-latest
     steps:
       - uses: docker/setup-buildx-action@v3
