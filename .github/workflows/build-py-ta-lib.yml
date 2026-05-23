@@ -1,0 +1,196 @@
+name: build py-ta-lib
+
+on:
+  push:
+    tags:
+      - "py-ta-lib-v*.*.*"
+  workflow_dispatch:
+    inputs:
+      semver:
+        description: "Semver to build (e.g. 1.0.0). Required for workflow_dispatch."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/cedricfarinazzo/py-ta-lib
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      semver: ${{ steps.parse.outputs.semver }}
+      major: ${{ steps.parse.outputs.major }}
+      minor: ${{ steps.parse.outputs.minor }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      default_python: ${{ steps.matrix.outputs.default_python }}
+      default_talib: ${{ steps.matrix.outputs.default_talib }}
+      default_distro: ${{ steps.matrix.outputs.default_distro }}
+      pythons: ${{ steps.matrix.outputs.pythons }}
+      distros: ${{ steps.matrix.outputs.distros }}
+      talibs: ${{ steps.matrix.outputs.talibs }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse semver from tag or dispatch input
+        id: parse
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+          DISPATCH_SEMVER: ${{ github.event.inputs.semver }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            SEMVER="$DISPATCH_SEMVER"
+          else
+            SEMVER="${REF_NAME#py-ta-lib-v}"
+          fi
+          if ! echo "$SEMVER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid semver: $SEMVER"
+            exit 1
+          fi
+          MAJOR="${SEMVER%%.*}"
+          MINOR_PART="${SEMVER#*.}"
+          MINOR_PART="${MINOR_PART%.*}"
+          echo "semver=$SEMVER" >> "$GITHUB_OUTPUT"
+          echo "major=$MAJOR"   >> "$GITHUB_OUTPUT"
+          echo "minor=${MAJOR}.${MINOR_PART}" >> "$GITHUB_OUTPUT"
+
+      - name: Build matrix from versions.json
+        id: matrix
+        run: |
+          set -euo pipefail
+          F=py-ta-lib/versions.json
+          MATRIX=$(jq -c '
+            [ .python[] as $p | .talib[] as $t | .distros[] as $d |
+              { python: $p, talib: $t, distro: $d } ]
+            | { include: . }
+          ' "$F")
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "default_python=$(jq -r .default_python "$F")" >> "$GITHUB_OUTPUT"
+          echo "default_talib=$(jq -r .default_talib "$F")"   >> "$GITHUB_OUTPUT"
+          echo "default_distro=$(jq -r .default_distro "$F")" >> "$GITHUB_OUTPUT"
+          echo "pythons=$(jq -c .python "$F")"  >> "$GITHUB_OUTPUT"
+          echo "distros=$(jq -c .distros "$F")" >> "$GITHUB_OUTPUT"
+          echo "talibs=$(jq -c .talib "$F")"    >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          SEMVER: ${{ needs.setup.outputs.semver }}
+          MAJOR: ${{ needs.setup.outputs.major }}
+          MINOR: ${{ needs.setup.outputs.minor }}
+          PY: ${{ matrix.python }}
+          TA: ${{ matrix.talib }}
+          DISTRO: ${{ matrix.distro }}
+        run: |
+          set -euo pipefail
+          SUFFIX="py${PY}-ta${TA}-${DISTRO}"
+          {
+            echo "tags<<EOF"
+            echo "${IMAGE}:${SEMVER}-${SUFFIX}"
+            echo "${IMAGE}:${MINOR}-${SUFFIX}"
+            echo "${IMAGE}:${MAJOR}-${SUFFIX}"
+            echo "${IMAGE}:${SUFFIX}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: py-ta-lib
+          file: py-ta-lib/Dockerfile.${{ matrix.distro }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          build-args: |
+            PYTHON_VERSION=${{ matrix.python }}
+            TALIB_VERSION=${{ matrix.talib }}
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha,scope=py-ta-lib-${{ matrix.python }}-${{ matrix.talib }}-${{ matrix.distro }}
+          cache-to: type=gha,scope=py-ta-lib-${{ matrix.python }}-${{ matrix.talib }}-${{ matrix.distro }},mode=max
+
+  aliases:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create rolling aliases
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          SEMVER: ${{ needs.setup.outputs.semver }}
+          MAJOR: ${{ needs.setup.outputs.major }}
+          MINOR: ${{ needs.setup.outputs.minor }}
+          DEF_PY: ${{ needs.setup.outputs.default_python }}
+          DEF_TA: ${{ needs.setup.outputs.default_talib }}
+          DEF_DI: ${{ needs.setup.outputs.default_distro }}
+          PYTHONS: ${{ needs.setup.outputs.pythons }}
+          DISTROS: ${{ needs.setup.outputs.distros }}
+        run: |
+          set -euo pipefail
+          alias_to() {
+            local SRC=$1; local DST=$2
+            echo "alias: ${DST} -> ${SRC}"
+            docker buildx imagetools create --tag "${IMAGE}:${DST}" "${IMAGE}:${SRC}"
+          }
+          DEFAULT_SRC="${SEMVER}-py${DEF_PY}-ta${DEF_TA}-${DEF_DI}"
+          alias_to "$DEFAULT_SRC" "latest"
+          alias_to "$DEFAULT_SRC" "${SEMVER}"
+          alias_to "$DEFAULT_SRC" "${MINOR}"
+          alias_to "$DEFAULT_SRC" "${MAJOR}"
+          for D in $(echo "$DISTROS" | jq -r '.[]'); do
+            SRC="${SEMVER}-py${DEF_PY}-ta${DEF_TA}-${D}"
+            alias_to "$SRC" "latest-${D}"
+            alias_to "$SRC" "${SEMVER}-${D}"
+            alias_to "$SRC" "${MINOR}-${D}"
+            alias_to "$SRC" "${MAJOR}-${D}"
+          done
+          for P in $(echo "$PYTHONS" | jq -r '.[]'); do
+            SRC="${SEMVER}-py${P}-ta${DEF_TA}-${DEF_DI}"
+            alias_to "$SRC" "latest-py${P}"
+          done
+          for P in $(echo "$PYTHONS" | jq -r '.[]'); do
+            for D in $(echo "$DISTROS" | jq -r '.[]'); do
+              SRC="${SEMVER}-py${P}-ta${DEF_TA}-${D}"
+              alias_to "$SRC" "latest-py${P}-${D}"
+            done
+          done
+
+      - name: Verify multi-arch manifest
+        env:
+          IMAGE: ${{ env.IMAGE }}
+        run: |
+          set -euo pipefail
+          for T in latest latest-debian latest-alpine; do
+            echo "=== ${T} ==="
+            docker buildx imagetools inspect "${IMAGE}:${T}" | tee "/tmp/${T}.txt"
+            grep -q 'linux/amd64' "/tmp/${T}.txt"
+            grep -q 'linux/arm64' "/tmp/${T}.txt"
+          done

@@ -1,0 +1,8 @@
+{
+  "python":  ["3.12", "3.13", "3.14"],
+  "talib":   ["0.6.4"],
+  "distros": ["debian", "alpine"],
+  "default_python": "3.14",
+  "default_talib":  "0.6.4",
+  "default_distro": "debian"
+}

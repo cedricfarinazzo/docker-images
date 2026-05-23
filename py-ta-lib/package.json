@@ -1,0 +1,12 @@
+{
+  "name": "py-ta-lib",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Python + TA-Lib C library base image (multi-arch, debian + alpine, python 3.12/3.13/3.14)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cedricfarinazzo/docker-images.git",
+    "directory": "py-ta-lib"
+  },
+  "license": "MIT"
+}

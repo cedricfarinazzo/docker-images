@@ -1,0 +1,30 @@
+ARG PYTHON_VERSION=3.14
+FROM python:${PYTHON_VERSION}-slim
+
+ARG TALIB_VERSION=0.6.4
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      build-essential \
+      wget \
+      ca-certificates \
+ && wget https://github.com/ta-lib/ta-lib/releases/download/v${TALIB_VERSION}/ta-lib-${TALIB_VERSION}-src.tar.gz \
+ && tar -xvzf ta-lib-${TALIB_VERSION}-src.tar.gz \
+ && cd ta-lib-${TALIB_VERSION} \
+ && ./configure --prefix=/usr \
+ && make \
+ && make install \
+ && cd .. \
+ && rm -rf ta-lib-${TALIB_VERSION} ta-lib-${TALIB_VERSION}-src.tar.gz \
+ && pip install --no-cache-dir "ta-lib==${TALIB_VERSION}" \
+ && apt-get purge -y wget \
+ && apt-get autoremove -y \
+ && rm -rf /var/lib/apt/lists/*
+
+LABEL org.opencontainers.image.source="https://github.com/cedricfarinazzo/docker-images" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.title="py-ta-lib" \
+      org.opencontainers.image.description="Python ${PYTHON_VERSION} (debian slim) + TA-Lib ${TALIB_VERSION}" \
+      io.cedricfarinazzo.python-version="${PYTHON_VERSION}" \
+      io.cedricfarinazzo.talib-version="${TALIB_VERSION}" \
+      io.cedricfarinazzo.distro="debian"

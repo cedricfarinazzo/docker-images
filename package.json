@@ -1,0 +1,28 @@
+{
+  "name": "docker-images",
+  "private": true,
+  "version": "0.0.0-monorepo-root",
+  "description": "Monorepo of public Docker images published to ghcr.io/cedricfarinazzo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cedricfarinazzo/docker-images.git"
+  },
+  "license": "MIT",
+  "author": "Cédric Farinazzo",
+  "scripts": {
+    "release": "multi-semantic-release"
+  },
+  "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.0",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^11.0.0",
+    "@semantic-release/release-notes-generator": "^14.0.0",
+    "multi-semantic-release": "^3.0.2",
+    "semantic-release": "^24.0.0",
+    "semantic-release-monorepo": "^8.0.2"
+  },
+  "workspaces": [
+    "py-ta-lib"
+  ]
+}
