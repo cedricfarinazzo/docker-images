@@ -24,9 +24,10 @@ docker run --rm ghcr.io/cedricfarinazzo/py-ta-lib:latest \
 ## What's in the image
 
 - Python (3.12 / 3.13 / 3.14) from the official `python:<ver>-slim` / `python:<ver>-alpine` base.
-- TA-Lib C library `0.6.4` installed to `/usr` (`libta_lib.so*`, `libta_lib.a`, headers in `/usr/include/ta-lib/`, `ta-lib-config` in `/usr/bin`).
-- Build toolchain (`build-essential` on debian, `build-base` on alpine) — left in place so `pip install ta-lib` works without extra packages.
+- TA-Lib C library `0.6.4` (sha256-verified during the multi-stage build) copied into `/usr`: `libta_lib.so*`, `libta_lib.a`, headers in `/usr/include/ta-lib/`, `ta-lib-config` in `/usr/bin`, `ta-lib.pc` in `/usr/lib/pkgconfig`.
+- **No build toolchain.** The multi-stage Dockerfile leaves `build-essential` / `build-base` and `wget` in the builder stage; the runtime image carries the C library only. If you `pip install ta-lib` on top, add the build toolchain in your own layer (see below).
 - Sensible Python container defaults (`PYTHONUNBUFFERED=1`, `PYTHONDONTWRITEBYTECODE=1`, `PIP_NO_CACHE_DIR=1`, `PIP_DISABLE_PIP_VERSION_CHECK=1`).
+- `TA_LIBRARY_PATH=/usr/lib`, `TA_INCLUDE_PATH=/usr/include`, `LD_LIBRARY_PATH=/usr/lib` so the `ta-lib` Python binding's setup.py finds the headers + lib without extra config.
 
 ## Matrix
 
@@ -81,17 +82,31 @@ The nightly workflow rebuilds the full matrix daily with `--no-cache --pull` to 
 
 ## Downstream usage
 
-### As a base image (simplest)
+### As a base image (debian variant)
 
 ```dockerfile
 FROM ghcr.io/cedricfarinazzo/py-ta-lib:latest
 
-# Pin whichever ta-lib Python binding version you want
-RUN pip install --no-cache-dir ta-lib==0.6.7
+# Build toolchain is NOT in the base image. Add it for `pip install ta-lib`.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential \
+ && rm -rf /var/lib/apt/lists/* \
+ && pip install --no-cache-dir ta-lib==0.6.7 \
+ && apt-get purge -y build-essential && apt-get autoremove -y
 
 COPY . /app
 WORKDIR /app
 RUN pip install -r requirements.txt
+```
+
+### As a base image (alpine variant)
+
+```dockerfile
+FROM ghcr.io/cedricfarinazzo/py-ta-lib:latest-alpine
+
+RUN apk add --no-cache --virtual .build build-base \
+ && pip install --no-cache-dir ta-lib==0.6.7 \
+ && apk del .build
 ```
 
 ### Narrow-path copy (don't pull whole /usr)
@@ -121,6 +136,7 @@ This avoids inheriting the full base layer when you only need the C library.
 |------------------|----------|------------------------------------------------------|
 | `PYTHON_VERSION` | `3.14`   | Python minor (used as `python:${PYTHON_VERSION}-{slim,alpine}`) |
 | `TALIB_VERSION`  | `0.6.4`  | TA-Lib C lib version; URL derived from it            |
+| `TALIB_SHA256`   | sha256 of v0.6.4 src tarball | sha256 of the TA-Lib tarball; verified after download. Bump together with `TALIB_VERSION`. |
 
 ## Build locally
 

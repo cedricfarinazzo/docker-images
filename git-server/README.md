@@ -115,8 +115,11 @@ git.example.com {
 
 | Arg                  | Default   | Description                                  |
 |----------------------|-----------|----------------------------------------------|
-| `ALPINE_VERSION`     | `3.23`    | Alpine base tag (`alpine:${ALPINE_VERSION}`) |
-| `S6_OVERLAY_VERSION` | `3.2.1.0` | s6-overlay release pulled from upstream      |
+| `ALPINE_VERSION`         | `3.23`    | Alpine base tag (`alpine:${ALPINE_VERSION}`) |
+| `S6_OVERLAY_VERSION`     | `3.2.1.0` | s6-overlay release pulled from upstream      |
+| `S6_NOARCH_SHA256`       | sha256 of `s6-overlay-noarch.tar.xz` v3.2.1.0 | Verified after download. Bump with `S6_OVERLAY_VERSION`. |
+| `S6_X86_64_SHA256`       | sha256 of `s6-overlay-x86_64.tar.xz` v3.2.1.0 | Verified after download (amd64 only). |
+| `S6_AARCH64_SHA256`      | sha256 of `s6-overlay-aarch64.tar.xz` v3.2.1.0 | Verified after download (arm64 only). |
 
 ## Build locally
 

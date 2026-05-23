@@ -1,34 +1,55 @@
 ARG PYTHON_VERSION=3.14
-FROM python:${PYTHON_VERSION}-slim
+
+# --- builder ---------------------------------------------------------------
+# Compile TA-Lib in a throwaway stage. Build toolchain stays here so the
+# runtime image carries only the resulting library + headers.
+FROM python:${PYTHON_VERSION}-slim AS builder
 
 ARG TALIB_VERSION=0.6.4
-
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1
+ARG TALIB_SHA256=aa04066d17d69c73b1baaef0883414d3d56ab3775872d82916d1cdb376a3ae86
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       build-essential \
       wget \
       ca-certificates \
- && wget https://github.com/ta-lib/ta-lib/releases/download/v${TALIB_VERSION}/ta-lib-${TALIB_VERSION}-src.tar.gz \
- && tar -xvzf ta-lib-${TALIB_VERSION}-src.tar.gz \
- && cd ta-lib-${TALIB_VERSION} \
- && ./configure --prefix=/usr \
- && make \
- && make install \
- && cd .. \
- && rm -rf ta-lib-${TALIB_VERSION} ta-lib-${TALIB_VERSION}-src.tar.gz \
- && apt-get purge -y wget \
- && apt-get autoremove -y \
- && rm -rf /var/lib/apt/lists/*
+ && wget -O /tmp/ta-lib.tar.gz https://github.com/ta-lib/ta-lib/releases/download/v${TALIB_VERSION}/ta-lib-${TALIB_VERSION}-src.tar.gz \
+ && echo "${TALIB_SHA256}  /tmp/ta-lib.tar.gz" | sha256sum -c - \
+ && tar -xzf /tmp/ta-lib.tar.gz -C /tmp \
+ && cd /tmp/ta-lib-${TALIB_VERSION} \
+ && ./configure --prefix=/opt/ta-lib \
+ && make -j"$(nproc)" \
+ && make install
+
+# --- runtime ---------------------------------------------------------------
+FROM python:${PYTHON_VERSION}-slim
+
+ARG PYTHON_VERSION
+ARG TALIB_VERSION=0.6.4
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    LD_LIBRARY_PATH=/usr/lib \
+    TA_LIBRARY_PATH=/usr/lib \
+    TA_INCLUDE_PATH=/usr/include
+
+# Bring TA-Lib runtime + headers + ta-lib-config into a clean image. No
+# build-essential, no wget. Downstream callers that need to `pip install
+# ta-lib` should add their own build toolchain on top.
+COPY --from=builder /opt/ta-lib/lib/libta_lib.so*  /usr/lib/
+COPY --from=builder /opt/ta-lib/lib/libta_lib.a    /usr/lib/
+COPY --from=builder /opt/ta-lib/lib/pkgconfig/ta-lib.pc /usr/lib/pkgconfig/ta-lib.pc
+COPY --from=builder /opt/ta-lib/include/ta-lib     /usr/include/ta-lib
+COPY --from=builder /opt/ta-lib/bin/ta-lib-config  /usr/bin/ta-lib-config
+
+RUN ldconfig
 
 LABEL org.opencontainers.image.source="https://github.com/cedricfarinazzo/docker-images" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.title="py-ta-lib" \
-      org.opencontainers.image.description="Python ${PYTHON_VERSION} (debian slim) + TA-Lib C library ${TALIB_VERSION} + build toolchain" \
+      org.opencontainers.image.description="Python ${PYTHON_VERSION} (debian slim) + TA-Lib C library ${TALIB_VERSION}" \
       io.cedricfarinazzo.python-version="${PYTHON_VERSION}" \
       io.cedricfarinazzo.talib-version="${TALIB_VERSION}" \
       io.cedricfarinazzo.distro="debian"

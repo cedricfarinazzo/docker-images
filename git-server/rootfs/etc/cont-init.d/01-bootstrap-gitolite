@@ -38,12 +38,33 @@ if [ ! -d "$GITOLITE_HOME/repositories" ]; then
         echo "[init] Pass the admin SSH pubkey via the GITOLITE_ADMIN_KEY env var on the first run." >&2
         exit 1
     fi
+    # Validate the admin username: must match the gitolite identifier
+    # rules (letters, digits, '.', '_', '-'). This name ends up on disk
+    # (keydir/<user>.pub) and inside the admin-repo conf — refuse
+    # anything that could break out of either.
+    case "$GITOLITE_ADMIN_USER" in
+        *[!A-Za-z0-9._-]*|'')
+            echo "[init] ERROR: invalid GITOLITE_ADMIN_USER='${GITOLITE_ADMIN_USER}'; allowed: [A-Za-z0-9._-]" >&2
+            exit 1
+            ;;
+    esac
+
     echo "[init] bootstrapping gitolite (admin user: $GITOLITE_ADMIN_USER)"
-    KEY_FILE="/tmp/${GITOLITE_ADMIN_USER}.pub"
+    KEY_FILE="$(mktemp -t gitolite-admin-XXXXXX.pub)"
+    chmod 600 "$KEY_FILE"
     printf '%s\n' "$GITOLITE_ADMIN_KEY" > "$KEY_FILE"
     chown git:git "$KEY_FILE"
-    su -s /bin/sh git -c "gitolite setup -pk '$KEY_FILE'"
+    # Pass the key path as a positional arg to a fixed -c script instead
+    # of interpolating it into the shell command — defends against
+    # someone supplying a hostile GITOLITE_ADMIN_USER (used in the
+    # mktemp template) or unusual filenames.
+    su -s /bin/sh git -c 'gitolite setup -pk "$1"' _ "$KEY_FILE"
+    SETUP_RC=$?
     rm -f "$KEY_FILE"
+    if [ "$SETUP_RC" -ne 0 ]; then
+        echo "[init] ERROR: gitolite setup failed (rc=${SETUP_RC})" >&2
+        exit "$SETUP_RC"
+    fi
 else
     echo "[init] gitolite already initialised at $GITOLITE_HOME, skipping bootstrap"
 fi
