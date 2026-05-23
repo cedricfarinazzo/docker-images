@@ -1,3 +1,10 @@
+# [py-ta-lib-v3.0.2](https://github.com/cedricfarinazzo/docker-images/compare/py-ta-lib-v3.0.1...py-ta-lib-v3.0.2) (2026-05-23)
+
+
+### Bug Fixes
+
+* **py-ta-lib:** apt/apk upgrade base packages in builder + runtime ([d0f9a75](https://github.com/cedricfarinazzo/docker-images/commit/d0f9a7545e3b6722889c5b4bcae867621648862d))
+
 # [py-ta-lib-v3.0.1](https://github.com/cedricfarinazzo/docker-images/compare/py-ta-lib-v3.0.0...py-ta-lib-v3.0.1) (2026-05-23)
 
 
