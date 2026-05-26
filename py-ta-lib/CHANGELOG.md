@@ -1,3 +1,10 @@
+# [py-ta-lib-v3.0.4](https://github.com/cedricfarinazzo/docker-images/compare/py-ta-lib-v3.0.3...py-ta-lib-v3.0.4) (2026-05-23)
+
+
+### Bug Fixes
+
+* **py-ta-lib:** copy entire TA-Lib install tree, don't glob lib names ([64bbf50](https://github.com/cedricfarinazzo/docker-images/commit/64bbf50067a3fd1cf456f4bb8ba69dde206c50a2))
+
 # [py-ta-lib-v3.0.3](https://github.com/cedricfarinazzo/docker-images/compare/py-ta-lib-v3.0.2...py-ta-lib-v3.0.3) (2026-05-23)
 
 
