@@ -16,7 +16,7 @@ Every release publishes immutable per-combo tags plus rolling aliases.
 <semver>-rover<X.Y.Z>-sg<X.Y.Z>-debian<codename>
 ```
 
-Example: `1.0.0-rover0.40.0-sg2.3.0-debianbookworm`.
+Example: `1.0.0-rover0.39.1-sg2.3.0-debianbookworm`.
 
 ### Rolling aliases
 
@@ -38,7 +38,7 @@ Example: `1.0.0-rover0.40.0-sg2.3.0-debianbookworm`.
 
 | Arg | Default | What |
 |---|---|---|
-| `ROVER_VERSION` | `0.40.0` | Apollo Rover CLI version (pulled from `https://rover.apollo.dev/nix/v<ver>`) |
+| `ROVER_VERSION` | `0.39.1` | Apollo Rover CLI version (pulled from `https://rover.apollo.dev/nix/v<ver>`) |
 | `SUPERGRAPH_VERSION` | `2.3.0` | Supergraph plugin version (pulled from `https://rover.apollo.dev/tar/supergraph/<arch>/v<ver>`) |
 | `DEBIAN_VERSION` | `bookworm` | Debian codename for base image |
 
@@ -63,7 +63,7 @@ The image already sets `APOLLO_ELV2_LICENSE=accept` + `APOLLO_ROVER_SKIP_UPDATE_
 ### Pin a specific combo
 
 ```yaml
-image: ghcr.io/cedricfarinazzo/rover:1.0.0-rover0.40.0-sg2.3.0-debianbookworm
+image: ghcr.io/cedricfarinazzo/rover:1.0.0-rover0.39.1-sg2.3.0-debianbookworm
 ```
 
 ### Smoke test
