@@ -21,6 +21,7 @@ Prebuilt public Docker images on **[ghcr.io/cedricfarinazzo](https://github.com/
 | [`py-ta-lib`](./py-ta-lib) | Python `3.12` / `3.13` / `3.14` + [TA-Lib](https://ta-lib.org/) C library `0.6.4` + build toolchain. The `ta-lib` Python binding is **not** preinstalled (release cadence is independent of the C lib — pin it yourself). Debian-slim and Alpine variants. | `docker pull ghcr.io/cedricfarinazzo/py-ta-lib:latest` |
 | [`tftp-hpa`](./tftp-hpa) | TFTP server (`tftp-hpa`) on Alpine `3.23`. Multi-arch. Volume at `/data`, exposes UDP 69. | `docker pull ghcr.io/cedricfarinazzo/tftp-hpa:latest` |
 | [`git-server`](./git-server) | Self-hosted git server: gitolite ACLs over SSH **and** nginx smart-HTTP. No web UI, transport only. Alpine, supervised by s6-overlay. Multi-arch. Exposes 22 + 80. | `docker pull ghcr.io/cedricfarinazzo/git-server:latest` |
+| [`rover`](./rover) | [Apollo Rover CLI](https://www.apollographql.com/docs/rover/) + Supergraph composition plugin baked in. Debian-slim. Multi-arch. Drop-in for federated GraphQL stack bring-up — no per-deploy CLI download. | `docker pull ghcr.io/cedricfarinazzo/rover:latest` |
 
 Each image directory has its own `README.md` with the full tag list, supported build args, and downstream recipes.
 

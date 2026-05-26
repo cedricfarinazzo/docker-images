@@ -1,0 +1,249 @@
+name: build-rover
+
+on:
+  push:
+    tags:
+      - "rover-v*.*.*"
+  workflow_dispatch:
+    inputs:
+      semver:
+        description: "Semver to build (e.g. 1.0.0). Required for workflow_dispatch."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/cedricfarinazzo/rover
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      semver: ${{ steps.parse.outputs.semver }}
+      major: ${{ steps.parse.outputs.major }}
+      minor: ${{ steps.parse.outputs.minor }}
+      build_matrix: ${{ steps.matrix.outputs.build_matrix }}
+      combo_matrix: ${{ steps.matrix.outputs.combo_matrix }}
+      default_rover: ${{ steps.matrix.outputs.default_rover }}
+      default_supergraph: ${{ steps.matrix.outputs.default_supergraph }}
+      default_debian: ${{ steps.matrix.outputs.default_debian }}
+      rovers: ${{ steps.matrix.outputs.rovers }}
+      supergraphs: ${{ steps.matrix.outputs.supergraphs }}
+      debians: ${{ steps.matrix.outputs.debians }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Parse semver from tag or dispatch input
+        id: parse
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+          DISPATCH_SEMVER: ${{ github.event.inputs.semver }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            SEMVER="$DISPATCH_SEMVER"
+          else
+            SEMVER="${REF_NAME#rover-v}"
+          fi
+          if ! echo "$SEMVER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid semver: $SEMVER"
+            exit 1
+          fi
+          MAJOR="${SEMVER%%.*}"
+          MINOR_PART="${SEMVER#*.}"
+          MINOR_PART="${MINOR_PART%.*}"
+          echo "semver=$SEMVER" >> "$GITHUB_OUTPUT"
+          echo "major=$MAJOR"   >> "$GITHUB_OUTPUT"
+          echo "minor=${MAJOR}.${MINOR_PART}" >> "$GITHUB_OUTPUT"
+
+      - name: Build matrix from versions.json
+        id: matrix
+        run: |
+          set -euo pipefail
+          F=rover/versions.json
+          BUILD=$(jq -c '
+            [ .rover[]      as $r |
+              .supergraph[] as $s |
+              .debian[]     as $d |
+              { arch: "amd64", runs_on: "ubuntu-latest",   rover: $r, supergraph: $s, debian: $d },
+              { arch: "arm64", runs_on: "ubuntu-24.04-arm", rover: $r, supergraph: $s, debian: $d }
+            ] | { include: . }
+          ' "$F")
+          COMBO=$(jq -c '
+            [ .rover[]      as $r |
+              .supergraph[] as $s |
+              .debian[]     as $d |
+              { rover: $r, supergraph: $s, debian: $d }
+            ] | { include: . }
+          ' "$F")
+          echo "build_matrix=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "combo_matrix=$COMBO" >> "$GITHUB_OUTPUT"
+          echo "default_rover=$(jq -r .default_rover "$F")"           >> "$GITHUB_OUTPUT"
+          echo "default_supergraph=$(jq -r .default_supergraph "$F")" >> "$GITHUB_OUTPUT"
+          echo "default_debian=$(jq -r .default_debian "$F")"         >> "$GITHUB_OUTPUT"
+          echo "rovers=$(jq -c .rover "$F")"           >> "$GITHUB_OUTPUT"
+          echo "supergraphs=$(jq -c .supergraph "$F")" >> "$GITHUB_OUTPUT"
+          echo "debians=$(jq -c .debian "$F")"         >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: setup
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.build_matrix) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+        with:
+          context: rover
+          file: rover/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          provenance: false
+          build-args: |
+            ROVER_VERSION=${{ matrix.rover }}
+            SUPERGRAPH_VERSION=${{ matrix.supergraph }}
+            DEBIAN_VERSION=${{ matrix.debian }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=rover-${{ matrix.rover }}-${{ matrix.supergraph }}-${{ matrix.debian }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=rover-${{ matrix.rover }}-${{ matrix.supergraph }}-${{ matrix.debian }}-${{ matrix.arch }},mode=max
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          ROVER: ${{ matrix.rover }}
+          SUPERGRAPH: ${{ matrix.supergraph }}
+          DEBIAN: ${{ matrix.debian }}
+        run: |
+          set -euo pipefail
+          DIR="/tmp/digests/rover${ROVER}-sg${SUPERGRAPH}-debian${DEBIAN}"
+          mkdir -p "$DIR"
+          touch "${DIR}/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: digests-rover${{ matrix.rover }}-sg${{ matrix.supergraph }}-debian${{ matrix.debian }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.combo_matrix) }}
+    steps:
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download digests for this combo
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: /tmp/digests
+          pattern: digests-rover${{ matrix.rover }}-sg${{ matrix.supergraph }}-debian${{ matrix.debian }}-*
+          merge-multiple: true
+
+      - name: Create multi-arch manifest with all tags
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          SEMVER: ${{ needs.setup.outputs.semver }}
+          MAJOR: ${{ needs.setup.outputs.major }}
+          MINOR: ${{ needs.setup.outputs.minor }}
+          ROVER: ${{ matrix.rover }}
+          SUPERGRAPH: ${{ matrix.supergraph }}
+          DEBIAN: ${{ matrix.debian }}
+        run: |
+          set -euo pipefail
+          SUFFIX="rover${ROVER}-sg${SUPERGRAPH}-debian${DEBIAN}"
+          TAG_ARGS=()
+          for T in "${SEMVER}-${SUFFIX}" "${MINOR}-${SUFFIX}" "${MAJOR}-${SUFFIX}" "${SUFFIX}"; do
+            TAG_ARGS+=( -t "${IMAGE}:${T}" )
+          done
+          SOURCES=()
+          cd "/tmp/digests/rover${ROVER}-sg${SUPERGRAPH}-debian${DEBIAN}"
+          for D in *; do
+            SOURCES+=( "${IMAGE}@sha256:${D}" )
+          done
+          if [ ${#SOURCES[@]} -eq 0 ]; then
+            echo "::error::No digests found for combo"
+            exit 1
+          fi
+          echo "Creating manifest for ${SUFFIX} with ${#SOURCES[@]} arch(es)"
+          docker buildx imagetools create "${TAG_ARGS[@]}" "${SOURCES[@]}"
+
+  aliases:
+    needs: [setup, merge]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create rolling aliases
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          SEMVER: ${{ needs.setup.outputs.semver }}
+          MAJOR: ${{ needs.setup.outputs.major }}
+          MINOR: ${{ needs.setup.outputs.minor }}
+          DEF_ROVER: ${{ needs.setup.outputs.default_rover }}
+          DEF_SUPERGRAPH: ${{ needs.setup.outputs.default_supergraph }}
+          DEF_DEBIAN: ${{ needs.setup.outputs.default_debian }}
+          ROVERS: ${{ needs.setup.outputs.rovers }}
+          SUPERGRAPHS: ${{ needs.setup.outputs.supergraphs }}
+          DEBIANS: ${{ needs.setup.outputs.debians }}
+        run: |
+          set -euo pipefail
+          alias_to() {
+            local SRC=$1; local DST=$2
+            echo "alias: ${DST} -> ${SRC}"
+            docker buildx imagetools create --tag "${IMAGE}:${DST}" "${IMAGE}:${SRC}"
+          }
+          DEFAULT_SRC="${SEMVER}-rover${DEF_ROVER}-sg${DEF_SUPERGRAPH}-debian${DEF_DEBIAN}"
+          alias_to "$DEFAULT_SRC" "latest"
+          alias_to "$DEFAULT_SRC" "${SEMVER}"
+          alias_to "$DEFAULT_SRC" "${MINOR}"
+          alias_to "$DEFAULT_SRC" "${MAJOR}"
+          for D in $(echo "$DEBIANS" | jq -r '.[]'); do
+            SRC="${SEMVER}-rover${DEF_ROVER}-sg${DEF_SUPERGRAPH}-debian${D}"
+            alias_to "$SRC" "latest-debian${D}"
+          done
+          for R in $(echo "$ROVERS" | jq -r '.[]'); do
+            SRC="${SEMVER}-rover${R}-sg${DEF_SUPERGRAPH}-debian${DEF_DEBIAN}"
+            alias_to "$SRC" "latest-rover${R}"
+          done
+          for S in $(echo "$SUPERGRAPHS" | jq -r '.[]'); do
+            SRC="${SEMVER}-rover${DEF_ROVER}-sg${S}-debian${DEF_DEBIAN}"
+            alias_to "$SRC" "latest-sg${S}"
+          done
+
+      - name: Verify multi-arch manifest
+        env:
+          IMAGE: ${{ env.IMAGE }}
+        run: |
+          set -euo pipefail
+          echo "=== latest ==="
+          docker buildx imagetools inspect "${IMAGE}:latest" | tee /tmp/latest.txt
+          grep -q 'linux/amd64' /tmp/latest.txt
+          grep -q 'linux/arm64' /tmp/latest.txt

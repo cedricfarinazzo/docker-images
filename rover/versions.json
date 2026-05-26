@@ -1,0 +1,8 @@
+{
+  "rover":      ["0.40.0"],
+  "supergraph": ["2.3.0"],
+  "debian":     ["bookworm"],
+  "default_rover":      "0.40.0",
+  "default_supergraph": "2.3.0",
+  "default_debian":     "bookworm"
+}
