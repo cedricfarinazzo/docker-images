@@ -21,6 +21,7 @@
   "workspaces": [
     "py-ta-lib",
     "tftp-hpa",
-    "git-server"
+    "git-server",
+    "rover"
   ]
 }
