@@ -22,6 +22,7 @@ Prebuilt public Docker images on **[ghcr.io/cedricfarinazzo](https://github.com/
 | [`tftp-hpa`](./tftp-hpa) | TFTP server (`tftp-hpa`) on Alpine `3.23`. Multi-arch. Volume at `/data`, exposes UDP 69. | `docker pull ghcr.io/cedricfarinazzo/tftp-hpa:latest` |
 | [`git-server`](./git-server) | Self-hosted git server: gitolite ACLs over SSH **and** nginx smart-HTTP. No web UI, transport only. Alpine, supervised by s6-overlay. Multi-arch. Exposes 22 + 80. | `docker pull ghcr.io/cedricfarinazzo/git-server:latest` |
 | [`rover`](./rover) | [Apollo Rover CLI](https://www.apollographql.com/docs/rover/) + Supergraph composition plugin baked in. Debian-slim. Multi-arch. Drop-in for federated GraphQL stack bring-up — no per-deploy CLI download. | `docker pull ghcr.io/cedricfarinazzo/rover:latest` |
+| [`actions-runner`](./actions-runner) | GitHub Actions self-hosted runner extending the official `actions/actions-runner` base with Docker CLI, Node.js 22, yq, and a full build toolchain. Multi-arch. | `docker pull ghcr.io/cedricfarinazzo/actions-runner:latest` |
 
 Each image directory has its own `README.md` with the full tag list, supported build args, and downstream recipes.
 

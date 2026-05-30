@@ -1,0 +1,116 @@
+name: nightly-actions-runner
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-actions-runner
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/cedricfarinazzo/actions-runner
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      build_matrix: ${{ steps.matrix.outputs.build_matrix }}
+      date: ${{ steps.matrix.outputs.date }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Build matrix
+        id: matrix
+        run: |
+          set -euo pipefail
+          BUILD=$(jq -cn '
+            [
+              { arch: "amd64", runs_on: "ubuntu-latest" },
+              { arch: "arm64", runs_on: "ubuntu-24.04-arm" }
+            ] | { include: . }
+          ')
+          echo "build_matrix=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: setup
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.build_matrix) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest (no cache)
+        id: build
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+        with:
+          context: actions-runner
+          file: actions-runner/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          pull: true
+          no-cache: true
+          provenance: false
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests/runner
+          touch "/tmp/digests/runner/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: digests-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Create multi-arch manifest with nightly tags
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          DATE: ${{ needs.setup.outputs.date }}
+        run: |
+          set -euo pipefail
+          TAG_ARGS=( -t "${IMAGE}:nightly" -t "${IMAGE}:nightly-${DATE}" )
+          SOURCES=()
+          cd /tmp/digests/runner
+          for D in *; do
+            SOURCES+=( "${IMAGE}@sha256:${D}" )
+          done
+          if [ ${#SOURCES[@]} -eq 0 ]; then
+            echo "::error::No digests found"
+            exit 1
+          fi
+          docker buildx imagetools create "${TAG_ARGS[@]}" "${SOURCES[@]}"
