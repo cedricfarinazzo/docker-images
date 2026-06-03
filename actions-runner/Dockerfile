@@ -53,7 +53,11 @@ RUN apt-get update -y && \
       zip && \
     rm -rf /var/lib/apt/lists/*
 
-# ── Docker CLI + Compose v2 + Buildx ────────────────────────────────────────
+# ── Docker CLI + Compose v2 ─────────────────────────────────────────────────
+# --no-install-recommends drops docker-buildx-plugin (~72 MB), which docker-ce-cli
+# only *Recommends*: the actions-runner base image already ships buildx at
+# /usr/local/lib/docker/cli-plugins/docker-buildx, so pulling the apt copy would
+# just duplicate that binary.
 RUN install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
       -o /etc/apt/keyrings/docker.asc && \
@@ -63,7 +67,7 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
       $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" \
       > /etc/apt/sources.list.d/docker.list && \
     apt-get update -y && \
-    apt-get install -y docker-ce-cli docker-compose-plugin docker-buildx-plugin && \
+    apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin && \
     ln -sf /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose && \
     rm -rf /var/lib/apt/lists/*
 

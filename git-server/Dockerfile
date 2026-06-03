@@ -34,8 +34,13 @@ ARG ALPINE_VERSION
 
 # Pick up upstream alpine patches that landed since alpine:${ALPINE_VERSION}
 # was cut, then install runtime deps. No curl/xz/wget/build-* in final.
-RUN apk upgrade --no-cache \
- && apk add --no-cache \
+#
+# shadow is installed only for `usermod` to relocate the git user, then removed
+# in the SAME layer — so its files never persist as a deletion delta and the
+# apk db is only rewritten once.
+RUN set -eux; \
+    apk upgrade --no-cache; \
+    apk add --no-cache \
       bash \
       ca-certificates \
       fcgiwrap \
@@ -47,15 +52,9 @@ RUN apk upgrade --no-cache \
       openssh-keygen \
       perl \
       shadow \
-      tzdata \
- && rm -rf /var/cache/apk/*
-
-# Drop s6-overlay tree from the builder into / (already extracted, verified).
-COPY --from=s6-builder /s6/ /
-
-# Normalise the git user (gitolite apk creates it on pre-install; we only
-# need to relocate its home dir + ensure runtime dirs exist).
-RUN set -eux; \
+      tzdata; \
+    # Normalise the git user (gitolite apk creates it on pre-install; we only
+    # need to relocate its home dir + ensure runtime dirs exist).
     if ! id -u git >/dev/null 2>&1; then \
         addgroup -S git; \
         adduser -S -G git -h /var/lib/gitolite -s /bin/sh git; \
@@ -63,7 +62,11 @@ RUN set -eux; \
     usermod -d /var/lib/gitolite -s /bin/sh git; \
     mkdir -p /var/lib/gitolite /run/sshd /run/fcgiwrap; \
     chown -R git:git /var/lib/gitolite /run/fcgiwrap; \
-    apk del shadow
+    apk del shadow; \
+    rm -rf /var/cache/apk/*
+
+# Drop s6-overlay tree from the builder into / (already extracted, verified).
+COPY --from=s6-builder /s6/ /
 
 # Drop in configs / supervised services / init scripts.
 COPY rootfs/ /

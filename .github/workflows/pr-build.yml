@@ -1,0 +1,106 @@
+name: pr-build
+
+# Validates that every changed image still builds on pull requests.
+# Build only — nothing is pushed and no registry credentials are used.
+# Build args fall back to the Dockerfile ARG defaults (no versions.json matrix
+# here: PR CI proves the Dockerfile compiles, the release build covers the
+# full python × talib × distro matrix).
+
+on:
+  pull_request:
+    paths:
+      - "py-ta-lib/**"
+      - "tftp-hpa/**"
+      - "git-server/**"
+      - "rover/**"
+      - "actions-runner/**"
+      - ".github/workflows/pr-build.yml"
+
+concurrency:
+  group: pr-build-${{ github.ref }}
+  cancel-in-progress: true
+
+# Build-only: no packages:write, no registry login.
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+      any: ${{ steps.set.outputs.any }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+
+      - name: Compute build matrix from changed paths
+        id: set
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # One entry per buildable artifact (py-ta-lib ships two Dockerfiles).
+          DEFS='[
+            {"name":"py-ta-lib-debian","image":"py-ta-lib","context":"py-ta-lib","file":"py-ta-lib/Dockerfile.debian"},
+            {"name":"py-ta-lib-alpine","image":"py-ta-lib","context":"py-ta-lib","file":"py-ta-lib/Dockerfile.alpine"},
+            {"name":"tftp-hpa","image":"tftp-hpa","context":"tftp-hpa","file":"tftp-hpa/Dockerfile"},
+            {"name":"git-server","image":"git-server","context":"git-server","file":"git-server/Dockerfile"},
+            {"name":"rover","image":"rover","context":"rover","file":"rover/Dockerfile"},
+            {"name":"actions-runner","image":"actions-runner","context":"actions-runner","file":"actions-runner/Dockerfile"}
+          ]'
+
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "Changed files:"; echo "$CHANGED"
+
+          # If the workflow itself changed, validate everything; otherwise only
+          # the images whose top-level directory was touched.
+          if echo "$CHANGED" | grep -q '^\.github/workflows/pr-build\.yml$'; then
+            DIRS=$(echo "$DEFS" | jq -r '.[].image' | sort -u)
+          else
+            DIRS=$(echo "$CHANGED" | cut -d/ -f1 | sort -u)
+          fi
+
+          INCLUDE=$(echo "$DEFS" | jq -c --arg dirs "$DIRS" '
+            ($dirs | split("\n") | map(select(length > 0))) as $changed
+            | map(select(.image as $i | $changed | index($i)))
+            | [ .[] as $d
+                | ($d + {arch:"amd64", runs_on:"ubuntu-latest"}),
+                  ($d + {arch:"arm64", runs_on:"ubuntu-24.04-arm"}) ]
+          ')
+
+          COUNT=$(echo "$INCLUDE" | jq 'length')
+          echo "matrix={\"include\":$INCLUDE}" >> "$GITHUB_OUTPUT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "any=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Will build $COUNT target(s)."
+
+  build:
+    needs: detect
+    if: needs.detect.outputs.any == 'true'
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
+    name: build ${{ matrix.name }} (${{ matrix.arch }})
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - name: Build (no push)
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/${{ matrix.arch }}
+          push: false
+          provenance: false
+          cache-from: type=gha,scope=pr-${{ matrix.name }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=pr-${{ matrix.name }}-${{ matrix.arch }},mode=max

@@ -41,9 +41,11 @@ ENV PYTHONUNBUFFERED=1 \
     TA_INCLUDE_PATH=/usr/include
 
 # Pick up upstream debian patches that landed since python:slim was cut.
+# Clear apt/debconf/dpkg churn in the same layer so it doesn't bloat the image
+# (debconf templates + apt lists are rewritten by the upgrade).
 RUN apt-get update \
  && apt-get upgrade -y --no-install-recommends \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* /var/cache/debconf/*-old /var/log/apt /var/log/dpkg.log
 
 # Bring TA-Lib runtime + headers (+ ta-lib-config if upstream still
 # ships it) into a clean image. No build-essential, no wget. Downstream
