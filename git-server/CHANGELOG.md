@@ -1,3 +1,15 @@
+# [git-server-v2.0.2](https://github.com/cedricfarinazzo/docker-images/compare/git-server-v2.0.1...git-server-v2.0.2) (2026-06-03)
+
+
+### Bug Fixes
+
+* **git-server:** repair gitolite first-boot bootstrap ([b6abbbe](https://github.com/cedricfarinazzo/docker-images/commit/b6abbbe09cd25c0476dfe1143beb2a18873cbb40))
+
+
+### Performance Improvements
+
+* **git-server:** fold shadow install/use/remove into one layer ([1d096c9](https://github.com/cedricfarinazzo/docker-images/commit/1d096c9c681db820725575d8d899525c57019253))
+
 # [git-server-v2.0.1](https://github.com/cedricfarinazzo/docker-images/compare/git-server-v2.0.0...git-server-v2.0.1) (2026-05-23)
 
 
