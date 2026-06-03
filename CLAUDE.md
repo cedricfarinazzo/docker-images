@@ -13,7 +13,7 @@ Monorepo of public Docker images published to `ghcr.io/cedricfarinazzo/<image>`.
 - `git-server/` — Self-hosted git server (gitolite over SSH + nginx smart-HTTP, no web UI). Single Dockerfile on Alpine with s6-overlay supervising sshd / nginx / fcgiwrap. Image carries a `rootfs/` tree merged into the container (`/etc/ssh/sshd_config.d/`, `/etc/nginx/http.d/`, `/etc/s6-overlay/`, `/etc/cont-init.d/`, CGI shim under `/usr/local/bin/`). SSH and HTTP share the **same** gitolite ACL via `REMOTE_USER`.
 - `rover/` — Apollo Rover CLI + Supergraph composition plugin on debian-slim. Single Dockerfile parameterised by `ROVER_VERSION` × `SUPERGRAPH_VERSION` × `DEBIAN_VERSION` axes. Multi-arch via `TARGETARCH` (rover supergraph plugin ships per-arch tarballs from `rover.apollo.dev`). `ENTRYPOINT ["rover"]`; pre-sets `APOLLO_ELV2_LICENSE=accept` + `APOLLO_ROVER_SKIP_UPDATE_CHECK=1` so downstream compose files only override `command:`.
 - `actions-runner/` — GitHub Actions self-hosted runner. Extends `ghcr.io/actions/actions-runner:latest` (Ubuntu base) with Docker CLI + Compose v2 + Buildx, Node.js 22 + yarn, yq (multi-arch via `TARGETARCH`), and a full build toolchain (`build-essential`, `cmake`, `python3`, `shellcheck`, etc.). No version matrix axes — single variant, two arches (amd64 + arm64). `versions.json` is `{}`. Tags: `latest`, `<semver>`, `<major>.<minor>`, `<major>`, `nightly`, `nightly-YYYYMMDD`.
-- `.github/workflows/` — CI: release (root), per-image build (on tag dispatch), per-image nightly rebuild.
+- `.github/workflows/` — CI: release (root), per-image build (on tag dispatch), per-image nightly rebuild, and `pr-build.yml` (build-only validation of changed images on pull requests — no push, `contents:read` only).
 - `package.json` — workspace root, declares image dirs in `workspaces` and holds `semantic-release` + `semantic-release-monorepo` devDependencies. Release CI uses `bun`.
 
 Image directories sit **at the repo root** — there is no `images/` wrapper.
@@ -22,7 +22,7 @@ Image directories sit **at the repo root** — there is no `images/` wrapper.
 
 - **Conventional Commits — scope MUST be an image folder name**: `feat(py-ta-lib): ...`, `fix(git-server): ...`, `feat(tftp-hpa)!: ...`. The allowed scopes are exactly the entries in the `workspaces` array of root `package.json`. Generic scopes (`security`, `ci`, `docs`, `release`, `repo`, etc.) are wrong and will leave commits out of any image's changelog.
 - **Combining changes across modules is fine.** A single commit may touch files in multiple image directories — `semantic-release-monorepo` filters commits by file path, so each affected image picks the commit up regardless of which one is named in the scope. If the work logically belongs to one image, scope it to that one. If it spans two and you want clean per-image release notes, split into two commits, one per scope.
-- **Cross-cutting repo changes** (root `README.md`, `CLAUDE.md`, `.github/workflows/release.yml`, root `package.json`) can ride along inside an image-scoped commit using the most-affected image as scope, or stand alone as `chore(<image>): ...` / `docs(<image>): ...` if no real bump is wanted (`chore` / `docs` don't bump).
+- **Cross-cutting repo changes** (root `README.md`, `CLAUDE.md`, `.github/workflows/release.yml`, `.github/workflows/pr-build.yml`, root `package.json`) can ride along inside an image-scoped commit using the most-affected image as scope, or stand alone as `chore(<image>): ...` / `docs(<image>): ...` if no real bump is wanted (`chore` / `docs` don't bump).
 - **Per-image versioning**: each image has its own semver and `CHANGELOG.md`. Tags: `<image>-v<semver>` (e.g. `py-ta-lib-v1.2.3`).
 - **Matrix metadata** lives in `<image>/versions.json` — single source of truth. Workflows read it to expand build matrices. To add a python or distro variant, edit `versions.json`, do not edit the workflow.
 - **Tag scheme** for built images: `<semver>-py<pyver>-ta<taver>-<distro>` plus rolling aliases (see image README). `ta<ver>` is the **C library** version shipped in the image; the Python binding version is whatever the downstream caller pins.
@@ -146,6 +146,15 @@ Adjust:
 #### `.github/workflows/nightly-<name>.yml` (optional)
 
 Copy `nightly-py-ta-lib.yml`. Same adjustments as the build workflow. Drop if a daily rebuild isn't needed.
+
+#### `.github/workflows/pr-build.yml` (shared — register the new image)
+
+`pr-build.yml` is **one shared workflow**, not per-image. It build-validates changed images on PRs (`push: false`, no registry login). To wire in a new image, edit two hardcoded spots in it:
+
+- add the image dir to `on.pull_request.paths`, and
+- append an entry to the `DEFS` array in the `detect` job (one per Dockerfile — `py-ta-lib` has two: `Dockerfile.debian` + `Dockerfile.alpine`), with `name` / `image` / `context` / `file`.
+
+`detect` diffs the PR against its base and builds only the images whose dir changed (a change to `pr-build.yml` itself rebuilds everything), each on **native amd64 + arm64**. Build args use the Dockerfile `ARG` defaults — no `versions.json` matrix here; the full python × talib × distro matrix stays in `build-<name>.yml`.
 
 ### 5. Document it
 
