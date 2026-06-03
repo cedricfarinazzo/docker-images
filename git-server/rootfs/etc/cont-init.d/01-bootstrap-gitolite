@@ -50,17 +50,22 @@ if [ ! -d "$GITOLITE_HOME/repositories" ]; then
     esac
 
     echo "[init] bootstrapping gitolite (admin user: $GITOLITE_ADMIN_USER)"
-    KEY_FILE="$(mktemp -t gitolite-admin-XXXXXX.pub)"
-    chmod 600 "$KEY_FILE"
+    # gitolite derives the admin user from the pubkey *filename*
+    # (keydir/<basename>.pub), so the file must be named
+    # "${GITOLITE_ADMIN_USER}.pub". Use a temp dir and place the named key
+    # inside it — busybox mktemp rejects a -t template with a suffix after
+    # the X's, and the GITOLITE_ADMIN_USER validation above keeps the
+    # filename safe.
+    KEY_DIR="$(mktemp -d)"
+    KEY_FILE="$KEY_DIR/${GITOLITE_ADMIN_USER}.pub"
     printf '%s\n' "$GITOLITE_ADMIN_KEY" > "$KEY_FILE"
-    chown git:git "$KEY_FILE"
-    # Pass the key path as a positional arg to a fixed -c script instead
-    # of interpolating it into the shell command — defends against
-    # someone supplying a hostile GITOLITE_ADMIN_USER (used in the
-    # mktemp template) or unusual filenames.
+    chmod 600 "$KEY_FILE"
+    chown -R git:git "$KEY_DIR"
+    # Pass the key path as a positional arg to a fixed -c script instead of
+    # interpolating it into the shell command.
     su -s /bin/sh git -c 'gitolite setup -pk "$1"' _ "$KEY_FILE"
     SETUP_RC=$?
-    rm -f "$KEY_FILE"
+    rm -rf "$KEY_DIR"
     if [ "$SETUP_RC" -ne 0 ]; then
         echo "[init] ERROR: gitolite setup failed (rc=${SETUP_RC})" >&2
         exit "$SETUP_RC"
