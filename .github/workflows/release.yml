@@ -31,6 +31,9 @@ jobs:
       - name: Install deps
         run: bun install --frozen-lockfile || bun install
 
+      - name: Snapshot tags before release
+        run: git tag -l | sort > "$RUNNER_TEMP/tags_before.txt"
+
       - name: Release each workspace package
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -49,23 +52,39 @@ jobs:
       - name: Dispatch per-image build workflows for new tags
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           git fetch --tags --force
+
+          # Tags created during this run = current tags minus the pre-release
+          # snapshot. Using the snapshot (rather than "tag == HEAD") is what
+          # lets every bumped image dispatch: each @semantic-release/git commit
+          # advances HEAD, so when 2+ images bump only the last tag would sit
+          # at HEAD and the rest would be skipped.
+          NEW_TAGS=$(comm -13 "$RUNNER_TEMP/tags_before.txt" <(git tag -l | sort))
+          if [ -z "$NEW_TAGS" ]; then
+            echo "No new tags this run; nothing to dispatch."
+            exit 0
+          fi
+
+          # Valid dispatch targets are <workspace>-v<semver> tags only.
           PKGS=$(jq -r '.workspaces[]' package.json)
-          for PKG in $PKGS; do
-            TAG=$(git tag --list "${PKG}-v*" --sort=-version:refname | head -n1)
-            [ -z "$TAG" ] && { echo "no tag for ${PKG}, skipping"; continue; }
-            COMMIT_AT_TAG=$(git rev-list -n1 "$TAG")
-            HEAD_COMMIT=$(git rev-parse HEAD)
-            if [ "$COMMIT_AT_TAG" != "$HEAD_COMMIT" ]; then
-              echo "tag ${TAG} not at HEAD (predates this run), skipping"
+          while IFS= read -r TAG; do
+            [ -z "$TAG" ] && continue
+            PKG="${TAG%-v*}"
+            SEMVER="${TAG##*-v}"
+            if ! echo "$PKGS" | grep -qxF "$PKG"; then
+              echo "tag ${TAG}: '${PKG}' is not a workspace, skipping"
               continue
             fi
-            SEMVER="${TAG#${PKG}-v}"
+            if ! echo "$SEMVER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "tag ${TAG}: '${SEMVER}' is not a plain semver, skipping"
+              continue
+            fi
             echo "Dispatching build-${PKG}.yml for ${TAG} (semver=${SEMVER})"
             gh workflow run "build-${PKG}.yml" \
-              --repo "${{ github.repository }}" \
+              --repo "$REPO" \
               --ref "$TAG" \
               -f semver="$SEMVER"
-          done
+          done <<< "$NEW_TAGS"
