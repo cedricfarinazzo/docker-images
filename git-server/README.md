@@ -90,10 +90,10 @@ git.example.com {
 
 | Pattern | Example |
 |---------|---------|
-| `<semver>-alpine<ver>`        | `1.0.0-alpine3.23` |
-| `<major>.<minor>-alpine<ver>` | `1.0-alpine3.23`   |
-| `<major>-alpine<ver>`         | `1-alpine3.23`     |
-| `alpine<ver>` (rolling)       | `alpine3.23`       |
+| `<semver>-alpine<ver>`        | `1.0.0-alpine3.24` |
+| `<major>.<minor>-alpine<ver>` | `1.0-alpine3.24`   |
+| `<major>-alpine<ver>`         | `1-alpine3.24`     |
+| `alpine<ver>` (rolling)       | `alpine3.24`       |
 
 ### Rolling aliases
 
@@ -115,7 +115,7 @@ git.example.com {
 
 | Arg                  | Default   | Description                                  |
 |----------------------|-----------|----------------------------------------------|
-| `ALPINE_VERSION`         | `3.23`    | Alpine base tag (`alpine:${ALPINE_VERSION}`) |
+| `ALPINE_VERSION`         | `3.24`    | Alpine base tag (`alpine:${ALPINE_VERSION}`) |
 | `S6_OVERLAY_VERSION`     | `3.2.1.0` | s6-overlay release pulled from upstream      |
 | `S6_NOARCH_SHA256`       | sha256 of `s6-overlay-noarch.tar.xz` v3.2.1.0 | Verified after download. Bump with `S6_OVERLAY_VERSION`. |
 | `S6_X86_64_SHA256`       | sha256 of `s6-overlay-x86_64.tar.xz` v3.2.1.0 | Verified after download (amd64 only). |
@@ -127,7 +127,7 @@ git.example.com {
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   -f git-server/Dockerfile \
-  --build-arg ALPINE_VERSION=3.23 \
+  --build-arg ALPINE_VERSION=3.24 \
   -t git-server:test \
   git-server/
 ```
