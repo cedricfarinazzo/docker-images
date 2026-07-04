@@ -1,4 +1,4 @@
-ARG ALPINE_VERSION=3.23
+ARG ALPINE_VERSION=3.24
 
 # --- builder ---------------------------------------------------------------
 # Fetch + verify + extract s6-overlay in a throwaway stage so curl / xz
