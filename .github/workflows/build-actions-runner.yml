@@ -26,6 +26,7 @@ jobs:
       major: ${{ steps.parse.outputs.major }}
       minor: ${{ steps.parse.outputs.minor }}
       build_matrix: ${{ steps.matrix.outputs.build_matrix }}
+      runner_version: ${{ steps.matrix.outputs.runner_version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -57,6 +58,7 @@ jobs:
         id: matrix
         run: |
           set -euo pipefail
+          F=actions-runner/versions.json
           BUILD=$(jq -cn '
             [
               { arch: "amd64", runs_on: "ubuntu-latest" },
@@ -64,6 +66,7 @@ jobs:
             ] | { include: . }
           ')
           echo "build_matrix=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "runner_version=$(jq -r .runner_version "$F")" >> "$GITHUB_OUTPUT"
 
   build:
     needs: setup
@@ -90,6 +93,8 @@ jobs:
           file: actions-runner/Dockerfile
           platforms: linux/${{ matrix.arch }}
           provenance: false
+          build-args: |
+            RUNNER_VERSION=${{ needs.setup.outputs.runner_version }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=actions-runner-${{ matrix.arch }}
           cache-to: type=gha,scope=actions-runner-${{ matrix.arch }},mode=max
