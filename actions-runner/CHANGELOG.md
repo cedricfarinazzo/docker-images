@@ -1,3 +1,10 @@
+# [actions-runner-v1.1.0](https://github.com/cedricfarinazzo/docker-images/compare/actions-runner-v1.0.1...actions-runner-v1.1.0) (2026-08-10)
+
+
+### Features
+
+* **actions-runner:** pin base runner image version via versions.json ([c442e82](https://github.com/cedricfarinazzo/docker-images/commit/c442e82abbccf3e16fafefc341dfcf7c4c6d52d3))
+
 # [actions-runner-v1.0.1](https://github.com/cedricfarinazzo/docker-images/compare/actions-runner-v1.0.0...actions-runner-v1.0.1) (2026-06-03)
 
 
