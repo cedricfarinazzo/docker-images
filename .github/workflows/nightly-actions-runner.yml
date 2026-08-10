@@ -22,12 +22,14 @@ jobs:
     outputs:
       build_matrix: ${{ steps.matrix.outputs.build_matrix }}
       date: ${{ steps.matrix.outputs.date }}
+      runner_version: ${{ steps.matrix.outputs.runner_version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Build matrix
         id: matrix
         run: |
           set -euo pipefail
+          F=actions-runner/versions.json
           BUILD=$(jq -cn '
             [
               { arch: "amd64", runs_on: "ubuntu-latest" },
@@ -36,6 +38,7 @@ jobs:
           ')
           echo "build_matrix=$BUILD" >> "$GITHUB_OUTPUT"
           echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "runner_version=$(jq -r .runner_version "$F")" >> "$GITHUB_OUTPUT"
 
   build:
     needs: setup
@@ -62,6 +65,8 @@ jobs:
           pull: true
           no-cache: true
           provenance: false
+          build-args: |
+            RUNNER_VERSION=${{ needs.setup.outputs.runner_version }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest

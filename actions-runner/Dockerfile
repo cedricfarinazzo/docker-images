@@ -1,4 +1,5 @@
-FROM ghcr.io/actions/actions-runner:latest
+ARG RUNNER_VERSION=2.336.0
+FROM ghcr.io/actions/actions-runner:${RUNNER_VERSION}
 
 USER root
 
@@ -83,8 +84,10 @@ RUN curl -fsSL "https://github.com/mikefarah/yq/releases/latest/download/yq_linu
       -o /usr/local/bin/yq && \
     chmod +x /usr/local/bin/yq
 
+ARG RUNNER_VERSION
 LABEL org.opencontainers.image.source="https://github.com/cedricfarinazzo/docker-images" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.title="actions-runner"
+      org.opencontainers.image.title="actions-runner" \
+      io.cedricfarinazzo.runner-version="${RUNNER_VERSION}"
 
 USER runner

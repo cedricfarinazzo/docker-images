@@ -1,6 +1,6 @@
 # actions-runner
 
-GitHub Actions self-hosted runner image extending [`ghcr.io/actions/actions-runner`](https://github.com/actions/runner/pkgs/container/actions-runner) with a full build toolchain baked in.
+GitHub Actions self-hosted runner image extending [`ghcr.io/actions/actions-runner`](https://github.com/actions/runner/pkgs/container/actions-runner) (pinned version, see `versions.json`) with a full build toolchain baked in.
 
 ```bash
 docker pull ghcr.io/cedricfarinazzo/actions-runner:latest
@@ -27,7 +27,7 @@ On top of the official runner base (Ubuntu):
 | `<semver>` | Immutable release (e.g. `1.0.0`) |
 | `<major>.<minor>` | Rolling minor (e.g. `1.0`) |
 | `<major>` | Rolling major (e.g. `1`) |
-| `nightly` | Daily rebuild from `ghcr.io/actions/actions-runner:latest` |
+| `nightly` | Daily rebuild from the pinned `ghcr.io/actions/actions-runner` version |
 | `nightly-YYYYMMDD` | Dated nightly snapshot |
 
 ## Usage
@@ -50,6 +50,10 @@ USER root
 RUN apt-get update && apt-get install -y --no-install-recommends <extra> && rm -rf /var/lib/apt/lists/*
 USER runner
 ```
+
+## Base image version
+
+`versions.json` pins `runner_version` (the `ghcr.io/actions/actions-runner` tag) — release/nightly CI reads it and passes it as a build-arg. The Dockerfile `ARG RUNNER_VERSION` default is kept in sync and is what Renovate bumps and what PR builds use; bump `versions.json` by hand to change what release builds actually pin.
 
 ## Multi-arch
 
