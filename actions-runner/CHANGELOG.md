@@ -1,3 +1,10 @@
+# [actions-runner-v1.2.0](https://github.com/cedricfarinazzo/docker-images/compare/actions-runner-v1.1.0...actions-runner-v1.2.0) (2026-11-05)
+
+
+### Features
+
+* **actions-runner:** Update runner version to 2.338.2 ([#30](https://github.com/cedricfarinazzo/docker-images/issues/30)) ([5998137](https://github.com/cedricfarinazzo/docker-images/commit/59981373a1a230a219a6ed9468b54dc8f27a5968))
+
 # [actions-runner-v1.1.0](https://github.com/cedricfarinazzo/docker-images/compare/actions-runner-v1.0.1...actions-runner-v1.1.0) (2026-08-10)
 
 
